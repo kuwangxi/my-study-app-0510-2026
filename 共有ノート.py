@@ -10,13 +10,9 @@ from datetime import datetime
 # ==========================================
 st.set_page_config(page_title="ふたりの共有ノート", page_icon="🤝", layout="centered")
 
-# Firebase初期化 (エラー回避のための修正版)
 if not firebase_admin._apps:
     try:
-        # Secretsから情報を取得
         cred_dict = dict(st.secrets["firebase"])
-        
-        # 秘密鍵の改行コードを適切に処理
         if "private_key" in cred_dict:
             cred_dict["private_key"] = cred_dict["private_key"].replace("\\n", "\n")
             
@@ -26,13 +22,12 @@ if not firebase_admin._apps:
         st.error(f"Firebaseの認証エラー: {e}")
         st.stop()
 else:
-    # すでに初期化されている場合は、既存のアプリをそのまま使う
     firebase_admin.get_app()
 
 db = firestore.client()
 APP_ID = "couple-secure-v2"
 
-# データベースの参照パスを取得する関数
+# データベース参照関数
 def get_events_ref():
     return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_events')
 
@@ -43,10 +38,10 @@ def get_rooms_ref():
     return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_rooms')
 
 # ==========================================
-# 2. セッション・ユーティリティ関数
+# 2. セッション管理
 # ==========================================
-if "uid" not in st.session_state:
-    st.session_state.uid = str(uuid.uuid4())
+if "user_name" not in st.session_state:
+    st.session_state.user_name = ""
 
 if "room_key" not in st.session_state:
     st.session_state.room_key = ""
@@ -55,58 +50,68 @@ if "is_logged" not in st.session_state:
     st.session_state.is_logged = False
 
 def generate_secure_key():
-    """29桁のセキュリティキー生成"""
     chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
     parts = [''.join(random.choices(chars, k=4)) for _ in range(7)]
-    last_char = random.choice(chars)
-    return '-'.join(parts) + '-' + last_char
+    return '-'.join(parts) + '-' + random.choice(chars)
 
 def logout():
     st.session_state.is_logged = False
     st.session_state.room_key = ""
+    st.session_state.user_name = ""
     st.rerun()
 
 # ==========================================
-# 3. ログイン / ルーム作成画面
+# 3. ログイン / 名前入力 / ルーム作成画面
 # ==========================================
-if not st.session_state.is_logged:
+if not st.session_state.is_logged or not st.session_state.user_name:
     st.markdown("<h1 style='text-align: center; color: #f43f5e;'>29-Digit Secure Sync</h1>", unsafe_allow_html=True)
     st.write("---")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("新しいノートを作る")
-        if st.button("発行する", use_container_width=True):
-            new_key = generate_secure_key()
-            get_rooms_ref().document(new_key).set({
-                'title': 'ふたりの共有ノート',
-                'createdAt': datetime.now().isoformat(),
-                'creator': st.session_state.uid
-            })
-            st.session_state.room_key = new_key
-            st.session_state.is_logged = True
-            st.rerun()
-
-    with col2:
-        st.subheader("既存のノートに参加")
-        input_key = st.text_input("29桁の秘密鍵を入力", placeholder="XXXX-XXXX...")
-        if st.button("参加する", use_container_width=True):
-            if len(input_key.strip()) >= 29:
-                st.session_state.room_key = input_key.strip()
+    # まず名前を入力してもらう
+    st.subheader("ユーザー設定")
+    name_input = st.text_input("あなたの表示名を入力してください", value=st.session_state.user_name, placeholder="例：Aさん")
+    
+    if name_input:
+        st.session_state.user_name = name_input
+        st.divider()
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("新しいノートを作る")
+            if st.button("発行する", use_container_width=True):
+                new_key = generate_secure_key()
+                get_rooms_ref().document(new_key).set({
+                    'title': 'ふたりの共有ノート',
+                    'createdAt': datetime.now().isoformat(),
+                    'creator': st.session_state.user_name
+                })
+                st.session_state.room_key = new_key
                 st.session_state.is_logged = True
                 st.rerun()
-            else:
-                st.warning("正しい29桁の鍵を入力してください。")
+
+        with col2:
+            st.subheader("既存のノートに参加")
+            input_key = st.text_input("29桁の秘密鍵を入力", placeholder="XXXX-XXXX...")
+            if st.button("参加する", use_container_width=True):
+                if len(input_key.strip()) >= 29:
+                    st.session_state.room_key = input_key.strip()
+                    st.session_state.is_logged = True
+                    st.rerun()
+                else:
+                    st.warning("正しい29桁の鍵を入力してください。")
+    else:
+        st.info("利用を開始するには名前を入力してください。")
     st.stop()
 
 # ==========================================
 # 4. メイン画面 (ログイン後)
 # ==========================================
 room_key = st.session_state.room_key
-uid = st.session_state.uid
+user_name = st.session_state.user_name
 
 st.sidebar.title("🤝 共有ノート")
-st.sidebar.caption(f"現在のキー: `{room_key}`")
+st.sidebar.write(f"ログイン名: **{user_name}**")
+st.sidebar.caption(f"キー: `{room_key}`")
 if st.sidebar.button("ログアウト"):
     logout()
 
@@ -117,7 +122,6 @@ events = [{"id": doc.id, **doc.to_dict()} for doc in events_docs]
 ng_docs = get_ng_ref().where("roomKey", "==", room_key).stream()
 ng_dates = [{"id": doc.id, **doc.to_dict()} for doc in ng_docs]
 
-# タブの作成
 tab1, tab2, tab3 = st.tabs(["📍 行きたい", "📅 予定", "🚫 NG日"])
 
 # --- タブ1: 行きたいリスト ---
@@ -131,9 +135,8 @@ with tab1:
             if submit and title:
                 get_events_ref().add({
                     "roomKey": room_key, "title": title, "url": url, "memo": memo,
-                    "status": "wishlist", "date": None, "timeType": None,
-                    "preferences": {}, "comments": [],
-                    "createdAt": datetime.now().isoformat()
+                    "userName": user_name, "status": "wishlist", "date": None,
+                    "preferences": {}, "comments": [], "createdAt": datetime.now().isoformat()
                 })
                 st.rerun()
 
@@ -142,63 +145,54 @@ with tab1:
 
     for item in wishlist_items:
         st.markdown(f"### {item['title']}")
-        if item.get("url"):
-            st.markdown(f"[🔗 参考リンク]({item['url']})")
-        if item.get("memo"):
-            st.caption(item["memo"])
-
+        st.caption(f"追加: {item.get('userName', '不明')}")
+        if item.get("url"): st.markdown(f"[🔗 リンク]({item['url']})")
+        
+        # 気分投票
         prefs = item.get("preferences", {})
-        my_pref = prefs.get(uid, "")
-        partner_uid = next((k for k in prefs.keys() if k != uid), None)
-        partner_pref = prefs.get(partner_uid, "") if partner_uid else None
-
+        my_pref = prefs.get(user_name, "")
+        
         c1, c2, c3 = st.columns(3)
-        def update_pref(pref_val, item_id=item["id"]):
-            get_events_ref().document(item_id).set({f"preferences": {uid: pref_val}}, merge=True)
+        def update_pref(p, i_id=item["id"]):
+            get_events_ref().document(i_id).set({"preferences": {user_name: p}}, merge=True)
             st.rerun()
 
-        if c1.button("😍 行きたい", key=f"want_{item['id']}", type="primary" if my_pref=="want" else "secondary"): update_pref("want")
-        if c2.button("😐 どっちでも", key=f"neutral_{item['id']}", type="primary" if my_pref=="neutral" else "secondary"): update_pref("neutral")
-        if c3.button("🙅‍♂️ うーん", key=f"no_{item['id']}", type="primary" if my_pref=="no" else "secondary"): update_pref("no")
+        if c1.button("😍", key=f"w_{item['id']}", type="primary" if my_pref=="want" else "secondary"): update_pref("want")
+        if c2.button("😐", key=f"n_{item['id']}", type="primary" if my_pref=="neutral" else "secondary"): update_pref("neutral")
+        if c3.button("🙅‍♂️", key=f"no_{item['id']}", type="primary" if my_pref=="no" else "secondary"): update_pref("no")
 
-        if partner_pref:
-            partner_icon = "😍" if partner_pref == "want" else "😐" if partner_pref == "neutral" else "🙅‍♂️"
-            st.info(f"相手の気分: {partner_icon}")
+        # 相手の気分表示
+        others = [f"{k}: {'😍' if v=='want' else '😐' if v=='neutral' else '🙅‍♂️'}" for k, v in prefs.items() if k != user_name]
+        if others: st.info(f"相手の反応: {', '.join(others)}")
 
-        with st.expander("💬 メッセージ相談 / 📅 日程を決める"):
-            comments = item.get("comments", [])
-            for c in comments:
-                who = "あなた" if c["userId"] == uid else "相手"
-                st.caption(f"**{who}**: {c['text']}")
+        with st.expander("💬 相談・日程確定"):
+            for c in item.get("comments", []):
+                # 投稿時間と名前を表示
+                c_time = c.get('createdAt', '')[11:16] # HH:mm
+                st.write(f"**{c.get('userName', '??')}** ({c_time}): {c['text']}")
             
             col_c, col_b = st.columns([3, 1])
-            new_comment = col_c.text_input("相談する...", key=f"c_in_{item['id']}")
-            if col_b.button("送信", key=f"c_btn_{item['id']}") and new_comment:
+            new_comment = col_c.text_input("相談...", key=f"ci_{item['id']}")
+            if col_b.button("送信", key=f"cb_{item['id']}") and new_comment:
                 get_events_ref().document(item["id"]).update({
-                    "comments": firestore.ArrayUnion([{"userId": uid, "text": new_comment, "createdAt": datetime.now().isoformat()}])
+                    "comments": firestore.ArrayUnion([{"userName": user_name, "text": new_comment, "createdAt": datetime.now().isoformat()}])
                 })
                 st.rerun()
 
             st.write("---")
-            st.write("**日程を確定して予定に移動**")
-            sel_date = st.date_input("日付を選択", key=f"d_in_{item['id']}")
-            ng_on_date = [n for n in ng_dates if n["date"] == str(sel_date)]
-            if ng_on_date:
-                st.warning("⚠️ この日はNG予定が登録されています！（相手またはあなた）")
+            sel_date = st.date_input("確定日", key=f"di_{item['id']}")
+            
+            # NG重複チェック
+            if any(n["date"] == str(sel_date) for n in ng_dates):
+                st.warning("⚠️ この日は誰かのNGが入っています！")
 
-            time_type = st.selectbox("時間帯", ["all", "morning", "afternoon", "custom"], 
-                                     format_func=lambda x: {"all":"終日", "morning":"午前", "afternoon":"午後", "custom":"時間指定"}[x],
-                                     key=f"t_in_{item['id']}")
-            custom_time = ""
-            if time_type == "custom":
-                custom_time = st.text_input("時間を入力 (例: 13:00〜15:00)", key=f"ct_in_{item['id']}")
+            t_type = st.selectbox("時間", ["all", "morning", "afternoon", "custom"], 
+                                 format_func=lambda x: {"all":"終日", "morning":"午前", "afternoon":"午後", "custom":"カスタム"}[x], key=f"ti_{item['id']}")
+            c_time = st.text_input("カスタム時間入力", key=f"cti_{item['id']}") if t_type == "custom" else ""
 
-            if st.button("予定を確定する", key=f"sch_btn_{item['id']}", type="primary"):
+            if st.button("予定を確定", key=f"fi_{item['id']}", type="primary"):
                 get_events_ref().document(item["id"]).update({
-                    "status": "scheduled",
-                    "date": str(sel_date),
-                    "timeType": time_type,
-                    "customTime": custom_time
+                    "status": "scheduled", "date": str(sel_date), "timeType": t_type, "customTime": c_time
                 })
                 st.rerun()
         st.divider()
@@ -206,61 +200,50 @@ with tab1:
 # --- タブ2: 予定 ---
 with tab2:
     st.subheader("確定した予定リスト")
-    scheduled_items = [e for e in events if e.get("status") == "scheduled"]
-    scheduled_items.sort(key=lambda x: x.get("date", ""))
+    scheduled = [e for e in events if e.get("status") == "scheduled"]
+    scheduled.sort(key=lambda x: x.get("date", ""))
 
-    if not scheduled_items:
-        st.info("まだ確定した予定はありません。")
-
-    for item in scheduled_items:
-        time_label = "終日"
-        if item.get("timeType") == "morning": time_label = "午前"
-        elif item.get("timeType") == "afternoon": time_label = "午後"
-        elif item.get("timeType") == "custom": time_label = item.get("customTime", "")
-
-        col_date, col_info = st.columns([1, 4])
-        with col_date:
-            st.markdown(f"**{item['date']}**")
-            st.caption(time_label)
-        with col_info:
-            st.markdown(f"**{item['title']}**")
-            c1, c2 = st.columns(2)
-            if c1.button("リストに戻す", key=f"rev_{item['id']}"):
-                get_events_ref().document(item["id"]).update({"status": "wishlist", "date": None, "timeType": None})
+    for item in scheduled:
+        t_label = {"all":"終日", "morning":"午前", "afternoon":"午後", "custom": item.get("customTime", "")}.get(item.get("timeType"), "")
+        with st.container(border=True):
+            col_d, col_i = st.columns([1, 3])
+            col_d.metric("日付", item['date'])
+            col_d.caption(t_label)
+            col_i.markdown(f"### {item['title']}")
+            if st.button("リストに戻す", key=f"rev_{item['id']}"):
+                get_events_ref().document(item["id"]).update({"status": "wishlist", "date": None})
                 st.rerun()
-            if c2.button("削除", key=f"del_sch_{item['id']}"):
-                get_events_ref().document(item["id"]).delete()
-                st.rerun()
-        st.divider()
 
 # --- タブ3: NG日 ---
 with tab3:
     st.subheader("NG予定の登録")
-    with st.form("add_ng_form", clear_on_submit=True):
-        ng_date = st.date_input("日付を選択")
-        ng_time = st.selectbox("時間帯", ["all", "morning", "afternoon"], format_func=lambda x: {"all":"終日", "morning":"午前", "afternoon":"午後"}[x])
-        if st.form_submit_button("NG日を追加する", type="primary"):
+    with st.form("ng_form", clear_on_submit=True):
+        ng_d = st.date_input("NGな日")
+        ng_t = st.selectbox("時間帯", ["all", "morning", "afternoon", "custom"], 
+                            format_func=lambda x: {"all":"終日", "morning":"午前", "afternoon":"午後", "custom":"カスタム時間"}[x])
+        ng_ct = st.text_input("カスタム時間（例: 15時以降）") if ng_t == "custom" else ""
+        ng_reason = st.text_input("理由（任意）", placeholder="仕事、法事など")
+        
+        if st.form_submit_button("NG日を追加"):
             get_ng_ref().add({
-                "roomKey": room_key, "userId": uid, "date": str(ng_date),
-                "timeType": ng_time, "createdAt": datetime.now().isoformat()
+                "roomKey": room_key, "userName": user_name, "date": str(ng_d),
+                "timeType": ng_t, "customTime": ng_ct, "reason": ng_reason,
+                "createdAt": datetime.now().isoformat()
             })
             st.rerun()
     
-    st.write("---")
-    st.subheader("登録済みのNG日")
+    st.divider()
+    st.subheader("みんなのNGリスト")
     ng_dates.sort(key=lambda x: x.get("date", ""))
     
     for n in ng_dates:
-        who = "あなた" if n["userId"] == uid else "相手"
-        time_label = {"all":"終日", "morning":"午前", "afternoon":"午後"}.get(n.get("timeType"), "")
+        t_val = n.get("customTime") if n.get("timeType") == "custom" else {"all":"終日", "morning":"午前", "afternoon":"午後"}.get(n.get("timeType"), "")
+        reason_txt = f"理由: {n['reason']}" if n.get("reason") else "理由なし"
         
-        c1, c2 = st.columns([4, 1])
-        with c1:
-            if who == "相手":
-                st.error(f"📅 {n['date']} ({time_label}) - {who}")
-            else:
-                st.info(f"📅 {n['date']} ({time_label}) - {who}")
-        with c2:
-            if who == "あなた" and st.button("削除", key=f"del_ng_{n['id']}"):
-                get_ng_ref().document(n["id"]).delete()
-                st.rerun()
+        with st.chat_message("user" if n["userName"] == user_name else "assistant"):
+            st.write(f"**{n['date']} ({t_val})**")
+            st.write(f"{n['userName']}さん - {reason_txt}")
+            if n["userName"] == user_name:
+                if st.button("削除", key=f"del_ng_{n['id']}"):
+                    get_ng_ref().document(n["id"]).delete()
+                    st.rerun()
