@@ -67,9 +67,8 @@ if not st.session_state.is_logged or not st.session_state.user_name:
     st.markdown("<h1 style='text-align: center; color: #f43f5e;'>29-Digit Secure Sync</h1>", unsafe_allow_html=True)
     st.write("---")
     
-    # まず名前を入力してもらう
     st.subheader("ユーザー設定")
-    name_input = st.text_input("あなたの表示名を入力してください", value=st.session_state.user_name, placeholder="例：Aさん")
+    name_input = st.text_input("あなたの表示名を入力してください", value=st.session_state.user_name, placeholder="例：ゆー")
     
     if name_input:
         st.session_state.user_name = name_input
@@ -146,7 +145,13 @@ with tab1:
     for item in wishlist_items:
         st.markdown(f"### {item['title']}")
         st.caption(f"追加: {item.get('userName', '不明')}")
-        if item.get("url"): st.markdown(f"[🔗 リンク]({item['url']})")
+        
+        # 【修正】メモを表示するように追加
+        if item.get("memo"):
+            st.info(f"📝 {item['memo']}")
+            
+        if item.get("url"): 
+            st.markdown(f"[🔗 リンク]({item['url']})")
         
         # 気分投票
         prefs = item.get("preferences", {})
@@ -161,14 +166,12 @@ with tab1:
         if c2.button("😐", key=f"n_{item['id']}", type="primary" if my_pref=="neutral" else "secondary"): update_pref("neutral")
         if c3.button("🙅‍♂️", key=f"no_{item['id']}", type="primary" if my_pref=="no" else "secondary"): update_pref("no")
 
-        # 相手の気分表示
         others = [f"{k}: {'😍' if v=='want' else '😐' if v=='neutral' else '🙅‍♂️'}" for k, v in prefs.items() if k != user_name]
-        if others: st.info(f"相手の反応: {', '.join(others)}")
+        if others: st.caption(f"相手の反応: {', '.join(others)}")
 
         with st.expander("💬 相談・日程確定"):
             for c in item.get("comments", []):
-                # 投稿時間と名前を表示
-                c_time = c.get('createdAt', '')[11:16] # HH:mm
+                c_time = c.get('createdAt', '')[11:16]
                 st.write(f"**{c.get('userName', '??')}** ({c_time}): {c['text']}")
             
             col_c, col_b = st.columns([3, 1])
@@ -181,10 +184,8 @@ with tab1:
 
             st.write("---")
             sel_date = st.date_input("確定日", key=f"di_{item['id']}")
-            
-            # NG重複チェック
             if any(n["date"] == str(sel_date) for n in ng_dates):
-                st.warning("⚠️ この日は誰かのNGが入っています！")
+                st.warning("⚠️ この日はNGが入っています！")
 
             t_type = st.selectbox("時間", ["all", "morning", "afternoon", "custom"], 
                                  format_func=lambda x: {"all":"終日", "morning":"午前", "afternoon":"午後", "custom":"カスタム"}[x], key=f"ti_{item['id']}")
@@ -210,6 +211,9 @@ with tab2:
             col_d.metric("日付", item['date'])
             col_d.caption(t_label)
             col_i.markdown(f"### {item['title']}")
+            # 予定タブでもメモを表示
+            if item.get("memo"):
+                col_i.caption(f"メモ: {item['memo']}")
             if st.button("リストに戻す", key=f"rev_{item['id']}"):
                 get_events_ref().document(item["id"]).update({"status": "wishlist", "date": None})
                 st.rerun()
@@ -233,17 +237,22 @@ with tab3:
             st.rerun()
     
     st.divider()
-    st.subheader("みんなのNGリスト")
+    # 【修正】「みんなの」を削除
+    st.subheader("NGリスト")
     ng_dates.sort(key=lambda x: x.get("date", ""))
     
     for n in ng_dates:
         t_val = n.get("customTime") if n.get("timeType") == "custom" else {"all":"終日", "morning":"午前", "afternoon":"午後"}.get(n.get("timeType"), "")
         reason_txt = f"理由: {n['reason']}" if n.get("reason") else "理由なし"
         
-        with st.chat_message("user" if n["userName"] == user_name else "assistant"):
-            st.write(f"**{n['date']} ({t_val})**")
-            st.write(f"{n['userName']}さん - {reason_txt}")
-            if n["userName"] == user_name:
-                if st.button("削除", key=f"del_ng_{n['id']}"):
-                    get_ng_ref().document(n["id"]).delete()
-                    st.rerun()
+        # 【修正】アイコンを削除し、さん付けも廃止
+        with st.container(border=True):
+            c1, c2 = st.columns([4, 1])
+            with c1:
+                st.write(f"**{n['date']} ({t_val})**")
+                st.write(f"{n['userName']} - {reason_txt}")
+            with c2:
+                if n["userName"] == user_name:
+                    if st.button("削除", key=f"del_ng_{n['id']}"):
+                        get_ng_ref().document(n["id"]).delete()
+                        st.rerun()
