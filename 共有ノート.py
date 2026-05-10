@@ -12,7 +12,6 @@ st.set_page_config(page_title="ふたりの共有ノート", page_icon="🤝", l
 
 # 日本時間(JST)を取得するための関数
 def get_jst_now():
-    # UTCから9時間進めた日本時間を取得
     return datetime.now(timezone(timedelta(hours=9)))
 
 if not firebase_admin._apps:
@@ -43,7 +42,7 @@ def get_rooms_ref():
     return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_rooms')
 
 # ==========================================
-# 2. セッション管理
+# 2. セッション管理 & コールバック
 # ==========================================
 if "user_name" not in st.session_state:
     st.session_state.user_name = ""
@@ -53,6 +52,20 @@ if "room_key" not in st.session_state:
 
 if "is_logged" not in st.session_state:
     st.session_state.is_logged = False
+
+# 相談送信用のコールバック関数
+def send_comment_callback(item_id, input_key, user_name):
+    new_comment = st.session_state.get(input_key)
+    if new_comment:
+        get_events_ref().document(item_id).update({
+            "comments": firestore.ArrayUnion([{
+                "userName": user_name, 
+                "text": new_comment, 
+                "createdAt": get_jst_now().isoformat()
+            }])
+        })
+        # 送信後に中身を空にする
+        st.session_state[input_key] = ""
 
 def generate_secure_key():
     chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -95,10 +108,10 @@ if not st.session_state.is_logged or not st.session_state.user_name:
 
         with col2:
             st.subheader("既存のノートに参加")
-            input_key = st.text_input("29桁の秘密鍵を入力", placeholder="XXXX-XXXX...")
+            input_key_login = st.text_input("29桁の秘密鍵を入力", placeholder="XXXX-XXXX...")
             if st.button("参加する", use_container_width=True):
-                if len(input_key.strip()) >= 29:
-                    st.session_state.room_key = input_key.strip()
+                if len(input_key_login.strip()) >= 29:
+                    st.session_state.room_key = input_key_login.strip()
                     st.session_state.is_logged = True
                     st.rerun()
                 else:
@@ -183,20 +196,22 @@ with tab1:
                     c_time = c.get('createdAt', '')[11:16]
                     st.write(f"**{c.get('userName', '??')}** ({c_time}): {c['text']}")
                 
+                # --- エラー回避済み：相談送信部分 ---
                 col_c, col_b = st.columns([3, 1])
                 input_key = f"ci_{item['id']}"
+                
+                # 入力欄
                 new_comment = col_c.text_input("相談...", key=input_key)
                 
-                if col_b.button("送信", key=f"cb_{item['id']}") and new_comment:
-                    get_events_ref().document(item["id"]).update({
-                        "comments": firestore.ArrayUnion([{"userName": user_name, "text": new_comment, "createdAt": get_jst_now().isoformat()}])
-                    })
-                    # 送信後に入力欄をリセット
-                    st.session_state[input_key] = ""
-                    st.rerun()
+                # 送信ボタンにコールバック(on_click)を紐付け
+                col_b.button(
+                    "送信", 
+                    key=f"cb_{item['id']}", 
+                    on_click=send_comment_callback, 
+                    args=(item["id"], input_key, user_name)
+                )
 
                 st.write("---")
-                # 確定日の初期値を今日に設定
                 sel_date = st.date_input("確定日", value=get_jst_now().date(), key=f"di_{item['id']}")
                 if any(n["date"] == str(sel_date) for n in ng_dates):
                     st.warning("⚠️ この日はNGが入っています！")
@@ -244,7 +259,6 @@ with tab2:
 with tab3:
     st.subheader("NG予定の登録")
     with st.form("ng_form", clear_on_submit=True):
-        # NG日の初期値を今日に設定
         ng_d = st.date_input("NGな日", value=get_jst_now().date())
         ng_t = st.selectbox("時間帯", ["all", "morning", "afternoon", "custom"], 
                             format_func=lambda x: {"all":"終日", "morning":"午前", "afternoon":"午後", "custom":"カスタム時間"}[x])
