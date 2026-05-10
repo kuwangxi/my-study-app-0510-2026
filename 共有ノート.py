@@ -149,7 +149,6 @@ with tab1:
 
     for item in wishlist_items:
         with st.container(border=True):
-            # タイトルと削除ボタンを横並びに
             head_col, del_col = st.columns([5, 1])
             head_col.markdown(f"### {item['title']}")
             if del_col.button("🗑️", key=f"del_wish_{item['id']}", help="この場所を削除"):
@@ -164,7 +163,6 @@ with tab1:
             if item.get("url"): 
                 st.markdown(f"[🔗 リンク]({item['url']})")
             
-            # 気分投票
             prefs = item.get("preferences", {})
             my_pref = prefs.get(user_name, "")
             
@@ -194,7 +192,8 @@ with tab1:
                     st.rerun()
 
                 st.write("---")
-                sel_date = st.date_input("確定日", key=f"di_{item['id']}")
+                # 【修正ポイント】valueに現在の日本時間を指定
+                sel_date = st.date_input("確定日", value=get_jst_now().date(), key=f"di_{item['id']}")
                 if any(n["date"] == str(sel_date) for n in ng_dates):
                     st.warning("⚠️ この日はNGが入っています！")
 
@@ -241,7 +240,8 @@ with tab2:
 with tab3:
     st.subheader("NG予定の登録")
     with st.form("ng_form", clear_on_submit=True):
-        ng_d = st.date_input("NGな日")
+        # 【修正ポイント】valueに現在の日本時間を指定
+        ng_d = st.date_input("NGな日", value=get_jst_now().date())
         ng_t = st.selectbox("時間帯", ["all", "morning", "afternoon", "custom"], 
                             format_func=lambda x: {"all":"終日", "morning":"午前", "afternoon":"午後", "custom":"カスタム時間"}[x])
         ng_ct = st.text_input("カスタム時間（例: 15時以降）") if ng_t == "custom" else ""
