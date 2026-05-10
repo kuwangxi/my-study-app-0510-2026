@@ -3,12 +3,17 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import random
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 # ==========================================
 # 1. 初期設定とFirebase接続
 # ==========================================
 st.set_page_config(page_title="ふたりの共有ノート", page_icon="🤝", layout="centered")
+
+# 日本時間(JST)を取得するための関数
+def get_jst_now():
+    # UTCから9時間進めた日本時間を取得
+    return datetime.now(timezone(timedelta(hours=9)))
 
 if not firebase_admin._apps:
     try:
@@ -81,7 +86,7 @@ if not st.session_state.is_logged or not st.session_state.user_name:
                 new_key = generate_secure_key()
                 get_rooms_ref().document(new_key).set({
                     'title': 'ふたりの共有ノート',
-                    'createdAt': datetime.now().isoformat(),
+                    'createdAt': get_jst_now().isoformat(),
                     'creator': st.session_state.user_name
                 })
                 st.session_state.room_key = new_key
@@ -135,7 +140,7 @@ with tab1:
                 get_events_ref().add({
                     "roomKey": room_key, "title": title, "url": url, "memo": memo,
                     "userName": user_name, "status": "wishlist", "date": None,
-                    "preferences": {}, "comments": [], "createdAt": datetime.now().isoformat()
+                    "preferences": {}, "comments": [], "createdAt": get_jst_now().isoformat()
                 })
                 st.rerun()
 
@@ -184,7 +189,7 @@ with tab1:
                 new_comment = col_c.text_input("相談...", key=f"ci_{item['id']}")
                 if col_b.button("送信", key=f"cb_{item['id']}") and new_comment:
                     get_events_ref().document(item["id"]).update({
-                        "comments": firestore.ArrayUnion([{"userName": user_name, "text": new_comment, "createdAt": datetime.now().isoformat()}])
+                        "comments": firestore.ArrayUnion([{"userName": user_name, "text": new_comment, "createdAt": get_jst_now().isoformat()}])
                     })
                     st.rerun()
 
@@ -212,22 +217,18 @@ with tab2:
     for item in scheduled:
         t_label = {"all":"終日", "morning":"午前", "afternoon":"午後", "custom": item.get("customTime", "")}.get(item.get("timeType"), "")
         
-        # UI改善：横長にせず、カード形式で情報を縦に並べることで「...」を回避
         with st.container(border=True):
             date_col, title_col = st.columns([1, 2])
             
-            # 日付部分を大きく表示
             with date_col:
                 st.markdown(f"#### 📅 {item['date']}")
                 st.caption(f"⏰ {t_label}")
             
-            # タイトルと操作部分
             with title_col:
                 st.markdown(f"### {item['title']}")
                 if item.get("memo"):
                     st.caption(f"📝 {item['memo']}")
                 
-                # ボタン類
                 btn_col1, btn_col2 = st.columns(2)
                 if btn_col1.button("リストに戻す", key=f"rev_{item['id']}", use_container_width=True):
                     get_events_ref().document(item["id"]).update({"status": "wishlist", "date": None})
@@ -250,7 +251,7 @@ with tab3:
             get_ng_ref().add({
                 "roomKey": room_key, "userName": user_name, "date": str(ng_d),
                 "timeType": ng_t, "customTime": ng_ct, "reason": ng_reason,
-                "createdAt": datetime.now().isoformat()
+                "createdAt": get_jst_now().isoformat()
             })
             st.rerun()
     
