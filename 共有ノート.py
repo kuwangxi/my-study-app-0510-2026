@@ -245,7 +245,7 @@ with tab3:
         ng_t = st.selectbox("時間帯", ["all", "morning", "afternoon", "custom"], 
                             format_func=lambda x: {"all":"終日", "morning":"午前", "afternoon":"午後", "custom":"カスタム時間"}[x])
         ng_ct = st.text_input("カスタム時間（例: 15時以降）") if ng_t == "custom" else ""
-        ng_reason = st.text_input("理由（任意）", placeholder="仕事、法事など")
+        ng_reason = st.text_input("理由（任意）", placeholder="予定内容など、書かなくてもOK")
         
         if st.form_submit_button("NG日を追加", use_container_width=True):
             get_ng_ref().add({
