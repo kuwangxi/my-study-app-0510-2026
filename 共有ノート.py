@@ -10,7 +10,7 @@ from datetime import datetime
 # ==========================================
 st.set_page_config(page_title="ふたりの共有ノート", page_icon="🤝", layout="centered")
 
-# Firebase初期化
+# Firebase初期化 (エラー回避のための修正版)
 if not firebase_admin._apps:
     try:
         # Secretsから情報を取得
@@ -25,9 +25,11 @@ if not firebase_admin._apps:
     except Exception as e:
         st.error(f"Firebaseの認証エラー: {e}")
         st.stop()
+else:
+    # すでに初期化されている場合は、既存のアプリをそのまま使う
+    firebase_admin.get_app()
 
 db = firestore.client()
-# 以下のコードはそのまま...
 APP_ID = "couple-secure-v2"
 
 # データベースの参照パスを取得する関数
@@ -43,7 +45,6 @@ def get_rooms_ref():
 # ==========================================
 # 2. セッション・ユーティリティ関数
 # ==========================================
-# ユーザーを識別するための簡易的なUIDを生成（ブラウザセッションごと）
 if "uid" not in st.session_state:
     st.session_state.uid = str(uuid.uuid4())
 
@@ -54,7 +55,7 @@ if "is_logged" not in st.session_state:
     st.session_state.is_logged = False
 
 def generate_secure_key():
-    """29桁のセキュリティキー生成 (4桁x7ブロック + 1桁)"""
+    """29桁のセキュリティキー生成"""
     chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
     parts = [''.join(random.choices(chars, k=4)) for _ in range(7)]
     last_char = random.choice(chars)
@@ -77,7 +78,6 @@ if not st.session_state.is_logged:
         st.subheader("新しいノートを作る")
         if st.button("発行する", use_container_width=True):
             new_key = generate_secure_key()
-            # ルーム情報を保存
             get_rooms_ref().document(new_key).set({
                 'title': 'ふたりの共有ノート',
                 'createdAt': datetime.now().isoformat(),
@@ -147,7 +147,6 @@ with tab1:
         if item.get("memo"):
             st.caption(item["memo"])
 
-        # 行きたい度ボタン
         prefs = item.get("preferences", {})
         my_pref = prefs.get(uid, "")
         partner_uid = next((k for k in prefs.keys() if k != uid), None)
@@ -166,15 +165,12 @@ with tab1:
             partner_icon = "😍" if partner_pref == "want" else "😐" if partner_pref == "neutral" else "🙅‍♂️"
             st.info(f"相手の気分: {partner_icon}")
 
-        # メッセージ＆スケジュール移行
         with st.expander("💬 メッセージ相談 / 📅 日程を決める"):
-            # コメント表示
             comments = item.get("comments", [])
             for c in comments:
                 who = "あなた" if c["userId"] == uid else "相手"
                 st.caption(f"**{who}**: {c['text']}")
             
-            # コメント追加
             col_c, col_b = st.columns([3, 1])
             new_comment = col_c.text_input("相談する...", key=f"c_in_{item['id']}")
             if col_b.button("送信", key=f"c_btn_{item['id']}") and new_comment:
@@ -186,8 +182,6 @@ with tab1:
             st.write("---")
             st.write("**日程を確定して予定に移動**")
             sel_date = st.date_input("日付を選択", key=f"d_in_{item['id']}")
-            
-            # NG日チェック
             ng_on_date = [n for n in ng_dates if n["date"] == str(sel_date)]
             if ng_on_date:
                 st.warning("⚠️ この日はNG予定が登録されています！（相手またはあなた）")
