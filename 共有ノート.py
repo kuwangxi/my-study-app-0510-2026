@@ -196,14 +196,10 @@ with tab1:
                     c_time = c.get('createdAt', '')[11:16]
                     st.write(f"**{c.get('userName', '??')}** ({c_time}): {c['text']}")
                 
-                # --- エラー回避済み：相談送信部分 ---
                 col_c, col_b = st.columns([3, 1])
                 input_key = f"ci_{item['id']}"
-                
-                # 入力欄
                 new_comment = col_c.text_input("相談...", key=input_key)
                 
-                # 送信ボタンにコールバック(on_click)を紐付け
                 col_b.button(
                     "送信", 
                     key=f"cb_{item['id']}", 
@@ -244,6 +240,11 @@ with tab2:
             
             with title_col:
                 st.markdown(f"### {item['title']}")
+                
+                # ここでURLを表示するように追加
+                if item.get("url"): 
+                    st.markdown(f"[🔗 リンク]({item['url']})")
+                    
                 if item.get("memo"):
                     st.caption(f"📝 {item['memo']}")
                 
