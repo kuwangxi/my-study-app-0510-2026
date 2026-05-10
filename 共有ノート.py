@@ -13,15 +13,21 @@ st.set_page_config(page_title="ふたりの共有ノート", page_icon="🤝", l
 # Firebase初期化
 if not firebase_admin._apps:
     try:
-        cred_info = dict(st.secrets["firebase"])
-        cred_info["private_key"] = cred_info["private_key"].replace("\\n", "\n")
-        cred = credentials.Certificate(cred_info)
+        # Secretsから情報を取得
+        cred_dict = dict(st.secrets["firebase"])
+        
+        # 秘密鍵の改行コードを適切に処理
+        if "private_key" in cred_dict:
+            cred_dict["private_key"] = cred_dict["private_key"].replace("\\n", "\n")
+            
+        cred = credentials.Certificate(cred_dict)
         firebase_admin.initialize_app(cred)
     except Exception as e:
         st.error(f"Firebaseの認証エラー: {e}")
         st.stop()
 
 db = firestore.client()
+# 以下のコードはそのまま...
 APP_ID = "couple-secure-v2"
 
 # データベースの参照パスを取得する関数
