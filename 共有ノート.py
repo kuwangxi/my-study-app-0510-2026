@@ -184,15 +184,19 @@ with tab1:
                     st.write(f"**{c.get('userName', '??')}** ({c_time}): {c['text']}")
                 
                 col_c, col_b = st.columns([3, 1])
-                new_comment = col_c.text_input("相談...", key=f"ci_{item['id']}")
+                input_key = f"ci_{item['id']}"
+                new_comment = col_c.text_input("相談...", key=input_key)
+                
                 if col_b.button("送信", key=f"cb_{item['id']}") and new_comment:
                     get_events_ref().document(item["id"]).update({
                         "comments": firestore.ArrayUnion([{"userName": user_name, "text": new_comment, "createdAt": get_jst_now().isoformat()}])
                     })
+                    # 送信後に入力欄をリセット
+                    st.session_state[input_key] = ""
                     st.rerun()
 
                 st.write("---")
-                # 【修正ポイント】valueに現在の日本時間を指定
+                # 確定日の初期値を今日に設定
                 sel_date = st.date_input("確定日", value=get_jst_now().date(), key=f"di_{item['id']}")
                 if any(n["date"] == str(sel_date) for n in ng_dates):
                     st.warning("⚠️ この日はNGが入っています！")
@@ -240,7 +244,7 @@ with tab2:
 with tab3:
     st.subheader("NG予定の登録")
     with st.form("ng_form", clear_on_submit=True):
-        # 【修正ポイント】valueに現在の日本時間を指定
+        # NG日の初期値を今日に設定
         ng_d = st.date_input("NGな日", value=get_jst_now().date())
         ng_t = st.selectbox("時間帯", ["all", "morning", "afternoon", "custom"], 
                             format_func=lambda x: {"all":"終日", "morning":"午前", "afternoon":"午後", "custom":"カスタム時間"}[x])
