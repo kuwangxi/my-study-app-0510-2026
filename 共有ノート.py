@@ -15,6 +15,12 @@ if "show_summary" not in st.session_state: st.session_state.show_summary = True
 if "hide_empty_days" not in st.session_state: st.session_state.hide_empty_days = False
 if "edit_id" not in st.session_state: st.session_state.edit_id = None
 
+# --- 追加：テキスト入力リセット用のセッション管理 ---
+if "input_title" not in st.session_state: st.session_state.input_title = ""
+if "input_url" not in st.session_state: st.session_state.input_url = ""
+if "input_memo" not in st.session_state: st.session_state.input_memo = ""
+if "ng_reason" not in st.session_state: st.session_state.ng_reason = ""
+
 # CSSの定義
 st.markdown(f"""
 <style>
@@ -73,7 +79,7 @@ def get_events_ref(): return db.collection('artifacts').document(APP_ID).collect
 def get_ng_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_ng_dates')
 def get_rooms_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_rooms')
 
-# 時間選択用UI (フォームの挙動を安定させるために修正)
+# 時間選択用UI
 def time_selector_ui(key_prefix):
     t_type = st.selectbox("時間指定", ["指定なし", "午前中", "午後", "終日", "カスタム"], key=f"t_type_{key_prefix}")
     if t_type == "カスタム":
@@ -164,11 +170,12 @@ tab1, tab2, tab3 = st.tabs(["📍 行きたい", "📅 予定", "🚫 NG日"])
 # --- タブ1: 行きたいリスト ---
 with tab1:
     with st.expander("＋ 追加する"):
-        # フォームの外で時間選択を行うことで、カスタム時の入力欄を即座に表示させる
-        t = st.text_input("場所/内容", key="wish_title_input")
-        u = st.text_input("URL", key="wish_url_input")
-        m = st.text_area("メモ", key="wish_memo_input")
+        # セッション状態と紐付けることでリセットを可能にする
+        t = st.text_input("場所/内容", key="input_title")
+        u = st.text_input("URL", key="input_url")
+        m = st.text_area("メモ", key="input_memo")
         wt = time_selector_ui("wish")
+        
         if st.button("追加", use_container_width=True, type="primary", key="wish_add_btn"):
             if t:
                 get_events_ref().add({
@@ -176,6 +183,10 @@ with tab1:
                     "userName": user_name, "status": "wishlist", "comments": [], 
                     "time": wt, "createdAt": get_jst_now().isoformat()
                 })
+                # 追加後にセッション変数を空にしてリセット
+                st.session_state.input_title = ""
+                st.session_state.input_url = ""
+                st.session_state.input_memo = ""
                 st.rerun()
             else:
                 st.warning("場所/内容を入力してください")
@@ -294,12 +305,13 @@ with tab2:
 # --- タブ3: NG日 ---
 with tab3:
     st.subheader("🚫 NG日を登録")
-    # ここもフォームを使わずに実装することで、時間選択をスムーズにします
     nd = st.date_input("行けない日", value=get_jst_now().date(), key="ng_date_input")
     nt_str = time_selector_ui("ng_add")
-    nr = st.text_input("理由など(任意)", key="ng_reason_input")
+    nr = st.text_input("理由など(任意)", key="ng_reason") # リセット用keyに変更
+    
     if st.button("NG登録", use_container_width=True, type="primary", key="ng_add_btn"):
         get_ng_ref().add({"roomKey": room_key, "userName": user_name, "date": str(nd), "reason": nr, "time": nt_str})
+        st.session_state.ng_reason = "" # 登録後に理由を空に
         st.rerun()
     
     st.divider()
