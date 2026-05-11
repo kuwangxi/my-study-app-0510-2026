@@ -9,65 +9,30 @@ from datetime import datetime, timedelta, timezone
 # ==========================================
 st.set_page_config(page_title="ふたりの共有ノート", page_icon="🤝", layout="centered")
 
-# セッション状態の初期化
+# --- セッション状態の初期化 ---
+# デフォルト値を変更：show_summary=True, hide_empty_days=True
 if "font_size" not in st.session_state: st.session_state.font_size = 14
 if "show_summary" not in st.session_state: st.session_state.show_summary = True
-if "hide_empty_days" not in st.session_state: st.session_state.hide_empty_days = False
+if "hide_empty_days" not in st.session_state: st.session_state.hide_empty_days = True
 if "edit_id" not in st.session_state: st.session_state.edit_id = None
 
-# --- 追加：テキスト入力リセット用のセッション管理 ---
+# テキスト入力リセット用のセッション管理
 if "input_title" not in st.session_state: st.session_state.input_title = ""
 if "input_url" not in st.session_state: st.session_state.input_url = ""
 if "input_memo" not in st.session_state: st.session_state.input_memo = ""
 if "ng_reason" not in st.session_state: st.session_state.ng_reason = ""
-
-# --- エラー対策：入力をクリアするためのフラグ ---
 if "clear_wish_inputs" not in st.session_state: st.session_state.clear_wish_inputs = False
 if "clear_ng_inputs" not in st.session_state: st.session_state.clear_ng_inputs = False
 
-# 画面描画の前に（ウィジェットが生成される前に）値をクリアする
+# 入力クリア処理
 if st.session_state.clear_wish_inputs:
     st.session_state.input_title = ""
     st.session_state.input_url = ""
     st.session_state.input_memo = ""
     st.session_state.clear_wish_inputs = False
-
 if st.session_state.clear_ng_inputs:
     st.session_state.ng_reason = ""
     st.session_state.clear_ng_inputs = False
-
-# CSSの定義
-st.markdown(f"""
-<style>
-    html, body, [class*="st-"] {{
-        font-size: {st.session_state.font_size}px !important;
-    }}
-    .past-item {{ color: #9e9e9e; }}
-    .calendar-card {{
-        background-color: rgba(128, 128, 128, 0.1);
-        border-radius: 8px;
-        padding: 8px 2px;
-        text-align: center;
-        border: 1px solid rgba(128, 128, 128, 0.3);
-        margin-bottom: 5px;
-    }}
-    .calendar-date {{
-        font-weight: bold;
-        color: #f43f5e; 
-        font-size: 0.9em;
-    }}
-    .calendar-today {{
-        background-color: rgba(244, 63, 94, 0.2);
-        border: 2px solid #f43f5e;
-    }}
-    .time-badge {{
-        background-color: rgba(128, 128, 128, 0.2);
-        padding: 2px 5px;
-        border-radius: 4px;
-        font-size: 0.8em;
-    }}
-</style>
-""", unsafe_allow_html=True)
 
 def get_jst_now():
     return datetime.now(timezone(timedelta(hours=9)))
@@ -76,6 +41,7 @@ def get_weekday_jp(dt):
     w_list = ['月', '火', '水', '木', '金', '土', '日']
     return w_list[dt.weekday()]
 
+# Firebase初期化
 if not firebase_admin._apps:
     try:
         cred_dict = dict(st.secrets["firebase"])
@@ -94,6 +60,45 @@ def get_events_ref(): return db.collection('artifacts').document(APP_ID).collect
 def get_ng_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_ng_dates')
 def get_rooms_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_rooms')
 
+# --- 設定の保存・読込機能 ---
+def save_app_settings():
+    """現在の設定をFirebaseに保存する"""
+    if st.session_state.get("room_key"):
+        get_rooms_ref().document(st.session_state.room_key).set({
+            "settings": {
+                "font_size": st.session_state.font_size,
+                "show_summary": st.session_state.show_summary,
+                "hide_empty_days": st.session_state.hide_empty_days
+            }
+        }, merge=True)
+
+def load_app_settings(room_key):
+    """Firebaseから設定を読み込む"""
+    doc = get_rooms_ref().document(room_key).get()
+    if doc.exists:
+        data = doc.to_dict()
+        if "settings" in data:
+            s = data["settings"]
+            st.session_state.font_size = s.get("font_size", 14)
+            st.session_state.show_summary = s.get("show_summary", True)
+            st.session_state.hide_empty_days = s.get("hide_empty_days", True)
+
+# CSSの定義（フォントサイズ反映）
+st.markdown(f"""
+<style>
+    html, body, [class*="st-"] {{ font-size: {st.session_state.font_size}px !important; }}
+    .past-item {{ color: #9e9e9e; }}
+    .calendar-card {{
+        background-color: rgba(128, 128, 128, 0.1);
+        border-radius: 8px; padding: 8px 2px; text-align: center;
+        border: 1px solid rgba(128, 128, 128, 0.3); margin-bottom: 5px;
+    }}
+    .calendar-date {{ font-weight: bold; color: #f43f5e; font-size: 0.9em; }}
+    .calendar-today {{ background-color: rgba(244, 63, 94, 0.2); border: 2px solid #f43f5e; }}
+    .time-badge {{ background-color: rgba(128, 128, 128, 0.2); padding: 2px 5px; border-radius: 4px; font-size: 0.8em; }}
+</style>
+""", unsafe_allow_html=True)
+
 # 時間選択用UI
 def time_selector_ui(key_prefix):
     t_type = st.selectbox("時間指定", ["指定なし", "午前中", "午後", "終日", "カスタム"], key=f"t_type_{key_prefix}")
@@ -102,13 +107,10 @@ def time_selector_ui(key_prefix):
         t_start = col_c1.time_input("開始", value=get_jst_now().time(), key=f"t_start_{key_prefix}")
         t_end = col_c2.time_input("終了", value=(get_jst_now() + timedelta(hours=2)).time(), key=f"t_end_{key_prefix}")
         return f"{t_start.strftime('%H:%M')}～{t_end.strftime('%H:%M')}"
-    elif t_type == "指定なし":
-        return None
-    else:
-        return t_type
+    return None if t_type == "指定なし" else t_type
 
 # ==========================================
-# 2. セッション管理
+# 2. セッション管理 & ログイン
 # ==========================================
 if "is_logged" not in st.session_state:
     q_room = st.query_params.get("room")
@@ -117,16 +119,15 @@ if "is_logged" not in st.session_state:
         st.session_state.room_key = q_room
         st.session_state.user_name = q_user
         st.session_state.is_logged = True
+        load_app_settings(q_room) # 設定読込
     else:
         st.session_state.is_logged = False
-
-if "user_name" not in st.session_state: st.session_state.user_name = ""
-if "room_key" not in st.session_state: st.session_state.room_key = ""
 
 def login_action(room, user):
     st.session_state.room_key, st.session_state.user_name, st.session_state.is_logged = room, user, True
     st.query_params["room"] = room
     st.query_params["user"] = user
+    load_app_settings(room) # ログイン時に設定をロード
 
 def logout():
     st.session_state.is_logged = False
@@ -134,19 +135,28 @@ def logout():
     st.rerun()
 
 # ==========================================
-# 3. サイドバー
+# 3. サイドバー (設定の維持)
 # ==========================================
 if st.session_state.is_logged:
     st.sidebar.title("⚙️ アプリ設定")
-    new_size = st.sidebar.slider("テキストの大きさ", 10, 24, value=st.session_state.font_size)
-    if st.sidebar.button("サイズを確定する", key="btn_confirm_font_main"):
-        st.session_state.font_size = new_size
-        st.rerun()
     
-    st.sidebar.divider()
-    st.session_state.show_summary = st.sidebar.checkbox("カレンダーサマリーを表示", value=st.session_state.show_summary)
-    if st.session_state.show_summary:
-        st.session_state.hide_empty_days = st.sidebar.checkbox("予定がある日のみ表示", value=st.session_state.hide_empty_days)
+    # フォントサイズ設定
+    new_size = st.sidebar.slider("テキストの大きさ", 10, 24, value=st.session_state.font_size)
+    
+    # チェックボックス設定 (変更されたら即座に保存)
+    new_show_summary = st.sidebar.checkbox("カレンダーサマリーを表示", value=st.session_state.show_summary)
+    new_hide_empty = st.sidebar.checkbox("予定がある日のみ表示", value=st.session_state.hide_empty_days)
+    
+    # 設定が変更された場合にFirebaseに保存してリロード
+    if (new_size != st.session_state.font_size or 
+        new_show_summary != st.session_state.show_summary or 
+        new_hide_empty != st.session_state.hide_empty_days):
+        
+        st.session_state.font_size = new_size
+        st.session_state.show_summary = new_show_summary
+        st.session_state.hide_empty_days = new_hide_empty
+        save_app_settings()
+        st.rerun()
     
     st.sidebar.divider()
     st.sidebar.caption(f"User: {st.session_state.user_name}")
@@ -156,25 +166,32 @@ if st.session_state.is_logged:
 # ==========================================
 # 4. ログイン画面
 # ==========================================
-if not st.session_state.is_logged or not st.session_state.user_name:
+if not st.session_state.get("is_logged") or not st.session_state.get("user_name"):
     st.markdown("<h1 style='text-align: center; color: #f43f5e;'>Shared Note Sync</h1>", unsafe_allow_html=True)
-    name_input = st.text_input("表示名を入力してください", value=st.session_state.user_name)
+    name_input = st.text_input("表示名を入力してください", value=st.session_state.get("user_name", ""))
     if name_input:
         st.session_state.user_name = name_input
         col1, col2 = st.columns(2)
         with col1:
             if st.button("新しいノートを作る", use_container_width=True):
                 new_key = '-'.join([''.join(random.choices('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', k=4)) for _ in range(7)])
-                get_rooms_ref().document(new_key).set({'createdAt': get_jst_now().isoformat(), 'creator': name_input})
-                login_action(new_key, name_input); st.rerun()
+                # 初期設定を含めて作成
+                get_rooms_ref().document(new_key).set({
+                    'createdAt': get_jst_now().isoformat(), 
+                    'creator': name_input,
+                    'settings': {"font_size": 14, "show_summary": True, "hide_empty_days": True}
+                })
+                login_action(new_key, name_input)
+                st.rerun()
         with col2:
             input_key = st.text_input("秘密鍵(29桁)を入力", placeholder="XXXX-XXXX...")
             if st.button("参加する", use_container_width=True) and len(input_key) >= 29:
-                login_action(input_key, name_input); st.rerun()
+                login_action(input_key, name_input)
+                st.rerun()
     st.stop()
 
 # ==========================================
-# 5. メイン画面
+# 5. メイン画面 (ロジックは維持)
 # ==========================================
 room_key, user_name = st.session_state.room_key, st.session_state.user_name
 events = [{"id": d.id, **d.to_dict()} for d in get_events_ref().where("roomKey", "==", room_key).stream()]
@@ -186,12 +203,10 @@ tab1, tab2, tab3 = st.tabs(["📍 行きたい", "📅 予定", "🚫 NG日"])
 # --- タブ1: 行きたいリスト ---
 with tab1:
     with st.expander("＋ 追加する"):
-        # セッション状態と紐付ける
         t = st.text_input("場所/内容", key="input_title")
         u = st.text_input("URL", key="input_url")
         m = st.text_area("メモ", key="input_memo")
         wt = time_selector_ui("wish")
-        
         if st.button("追加", use_container_width=True, type="primary", key="wish_add_btn"):
             if t:
                 get_events_ref().add({
@@ -199,11 +214,9 @@ with tab1:
                     "userName": user_name, "status": "wishlist", "comments": [], 
                     "time": wt, "createdAt": get_jst_now().isoformat()
                 })
-                # 追加後にクリアフラグを立ててリセット
                 st.session_state.clear_wish_inputs = True
                 st.rerun()
-            else:
-                st.warning("場所/内容を入力してください")
+            else: st.warning("場所/内容を入力してください")
 
     for item in [e for e in events if e.get("status") == "wishlist"]:
         with st.container(border=True):
@@ -211,7 +224,7 @@ with tab1:
                 et = st.text_input("編集: タイトル", item["title"], key=f"et_{item['id']}")
                 eu = st.text_input("編集: URL", item.get("url",""), key=f"eu_{item['id']}")
                 em = st.text_area("編集: メモ", item.get("memo",""), key=f"em_{item['id']}")
-                eti = st.text_input("編集: 時間 (自由入力)", item.get("time","") if item.get("time") else "", key=f"eti_{item['id']}")
+                eti = st.text_input("編集: 時間", item.get("time","") or "", key=f"eti_{item['id']}")
                 c1, c2, c3 = st.columns(3)
                 if c1.button("保存", key=f"sv_{item['id']}", use_container_width=True, type="primary"):
                     get_events_ref().document(item["id"]).update({"title":et, "url":eu, "memo":em, "time":eti if eti else None})
@@ -233,11 +246,10 @@ with tab1:
                     with st.form(key=f"comment_form_{item['id']}", clear_on_submit=True):
                         cc1, cc2 = st.columns([3,1])
                         new_c = cc1.text_input("メッセージ", placeholder="メッセージを入力...")
-                        if cc2.form_submit_button("送信", use_container_width=True) and new_c:
+                        if cc2.form_submit_button("送信") and new_c:
                             get_events_ref().document(item["id"]).update({"comments": firestore.ArrayUnion([{"userName": user_name, "text": new_c, "createdAt": get_jst_now().isoformat()}])})
                             st.rerun()
                     st.divider()
-                    st.write("確定情報を入力してください")
                     sd = st.date_input("確定日", value=get_jst_now().date(), key=f"sd_{item['id']}")
                     st_time = time_selector_ui(f"fix_{item['id']}")
                     if st.button("この日で確定", key=f"fix_btn_{item['id']}"):
@@ -283,8 +295,9 @@ with tab2:
         cls = "past-item" if is_past else ""
         with st.container(border=True):
             if st.session_state.edit_id == item["id"]:
-                new_date = st.date_input("日付変更", value=datetime.strptime(item["date"], "%Y-%m-%d").date(), key=f"nd_edit_{item['id']}")
-                new_time = st.text_input("時間変更", item.get("time","") if item.get("time") else "", key=f"nt_edit_time_{item['id']}")
+                nd_val = datetime.strptime(item["date"], "%Y-%m-%d").date()
+                new_date = st.date_input("日付変更", value=nd_val, key=f"nd_edit_{item['id']}")
+                new_time = st.text_input("時間変更", item.get("time","") or "", key=f"nt_edit_time_{item['id']}")
                 new_title = st.text_input("タイトル", item["title"], key=f"nt_edit_{item['id']}")
                 c1, c2, c3 = st.columns(3)
                 if c1.button("保存", key=f"ups_{item['id']}", use_container_width=True, type="primary"):
@@ -322,10 +335,8 @@ with tab3:
     nd = st.date_input("行けない日", value=get_jst_now().date(), key="ng_date_input")
     nt_str = time_selector_ui("ng_add")
     nr = st.text_input("理由など(任意)", key="ng_reason") 
-    
     if st.button("NG登録", use_container_width=True, type="primary", key="ng_add_btn"):
         get_ng_ref().add({"roomKey": room_key, "userName": user_name, "date": str(nd), "reason": nr, "time": nt_str})
-        # 登録後にクリアフラグを立ててリセット
         st.session_state.clear_ng_inputs = True
         st.rerun()
     
@@ -338,15 +349,11 @@ with tab3:
         with st.container(border=True):
             if st.session_state.edit_id == n["id"]:
                 nd2 = st.date_input("日付変更", value=datetime.strptime(n["date"], "%Y-%m-%d").date(), key=f"nd2_{n['id']}")
-                nt2 = st.text_input("時間変更 (自由入力)", n.get("time","") if n.get("time") else "", key=f"nt2_{n['id']}")
-                nr2 = st.text_input("理由変更", n.get("reason","") if n.get("reason") else "", key=f"nr2_{n['id']}")
+                nt2 = st.text_input("時間変更", n.get("time","") or "", key=f"nt2_{n['id']}")
+                nr2 = st.text_input("理由変更", n.get("reason","") or "", key=f"nr2_{n['id']}")
                 c1, c2, c3 = st.columns(3)
                 if c1.button("保存", key=f"sv_ng_{n['id']}", use_container_width=True, type="primary"):
-                    get_ng_ref().document(n["id"]).update({
-                        "date": str(nd2), 
-                        "reason": nr2, 
-                        "time": nt2 if nt2 else None
-                    })
+                    get_ng_ref().document(n["id"]).update({"date": str(nd2), "reason": nr2, "time": nt2 if nt2 else None})
                     st.session_state.edit_id = None; st.rerun()
                 if c2.button("キャンセル", key=f"cn_ng_{n['id']}", use_container_width=True):
                     st.session_state.edit_id = None; st.rerun()
