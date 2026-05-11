@@ -132,7 +132,6 @@ tab1, tab2, tab3 = st.tabs(["📍 行きたい", "📅 予定", "🚫 NG日"])
 # --- タブ1: 行きたいリスト ---
 with tab1:
     with st.expander("＋ 追加する"):
-        # カスタム時間を即時反映させるためformを解除
         t = st.text_input("場所/内容", key="add_wish_t")
         u = st.text_input("URL", key="add_wish_u")
         m = st.text_area("メモ", key="add_wish_m")
@@ -255,7 +254,12 @@ with tab2:
                 
                 col_b1, col_b2 = st.columns(2)
                 if col_b1.button("💬 履歴", key=f"hist_{item['id']}", use_container_width=True):
-                    st.info("\n".join([f"{c['userName']}: {c['text']}" for c in item.get("comments", [])]) or "やり取りはありません")
+                    # 表示用コンテナを作成
+                    with st.container():
+                        st.info("\n".join([f"{c['userName']}: {c['text']}" for c in item.get("comments", [])]) or "やり取りはありません")
+                        if st.button("履歴を閉じる", key=f"close_hist_{item['id']}"):
+                            st.rerun()
+                            
                 if col_b2.button("「行きたい」に戻す", key=f"rev_{item['id']}", use_container_width=True):
                     get_events_ref().document(item["id"]).update({"status":"wishlist", "date":None}); st.rerun()
 
@@ -270,7 +274,6 @@ with tab2:
 # --- タブ3: NG日 ---
 with tab3:
     st.subheader("🚫 NG日を登録")
-    # リアルタイム反映のためformを解除
     nd = st.date_input("行けない日", value=get_jst_now().date(), key="add_ng_date")
     nt_str = time_selector_ui("ng")
     nr = st.text_input("理由など(任意)", key="add_ng_reason")
