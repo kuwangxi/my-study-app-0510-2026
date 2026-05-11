@@ -176,24 +176,27 @@ with tab1:
                 if item.get("memo"): st.info(item["memo"])
                 
                 with st.expander("💬 相談・確定"):
-    for c in item.get("comments", []): 
-        st.write(f"**{c['userName']}**: {c['text']}")
-
-    # フォーム化して自動リセットを有効にする
-    with st.form(key=f"form_{item['id']}", clear_on_submit=True):
-        cc1, cc2 = st.columns([3, 1])
-        new_c = cc1.text_input("メッセージ", placeholder="入力してください...")
-        submit = cc2.form_submit_button("送信", use_container_width=True)
-        
-        if submit and new_c:
-            get_events_ref().document(item["id"]).update({
-                "comments": firestore.ArrayUnion([{
-                    "userName": user_name, 
-                    "text": new_c, 
-                    "createdAt": get_jst_now().isoformat()
-                }])
-            })
-            st.rerun()
+                    for c in item.get("comments", []): st.write(f"**{c['userName']}**: {c['text']}")
+                    cc1, cc2 = st.columns([3,1])
+                    msg_key = f"nc_{item['id']}"
+                    new_c = cc1.text_input("メッセージ", key=msg_key)
+                    if cc2.button("送信", key=f"nb_{item['id']}") and new_c:
+                        get_events_ref().document(item["id"]).update({"comments": firestore.ArrayUnion([{"userName":user_name, "text":new_c, "createdAt":get_jst_now().isoformat()}])})
+                        # 入力値をクリアするためにセッションからキーを削除してリラン
+                        if msg_key in st.session_state:
+                            del st.session_state[msg_key]
+                        st.rerun()
+                    st.divider()
+                    st.write("確定情報を入力してください")
+                    sd = st.date_input("確定日", value=get_jst_now().date(), key=f"sd_{item['id']}")
+                    st_time = time_selector_ui(f"fix_{item['id']}")
+                    if st.button("この日で確定", key=f"fix_btn_{item['id']}"):
+                        get_events_ref().document(item['id']).update({
+                            "status": "scheduled", 
+                            "date": str(sd),
+                            "time": st_time
+                        })
+                        st.rerun()
 
 # --- タブ2: 予定 ---
 with tab2:
