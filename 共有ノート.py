@@ -15,12 +15,6 @@ if "show_summary" not in st.session_state: st.session_state.show_summary = True
 if "hide_empty_days" not in st.session_state: st.session_state.hide_empty_days = False
 if "edit_id" not in st.session_state: st.session_state.edit_id = None
 
-# 入力リセット用の初期化
-input_keys = ["add_t", "add_u", "add_m", "ng_r", "t_type_wish", "t_type_ng_form"]
-for k in input_keys:
-    if k not in st.session_state:
-        st.session_state[k] = "" if "t_type" not in k else "指定なし"
-
 # CSSの定義
 st.markdown(f"""
 <style>
@@ -79,16 +73,8 @@ def get_events_ref(): return db.collection('artifacts').document(APP_ID).collect
 def get_ng_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_ng_dates')
 def get_rooms_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_rooms')
 
-# 入力フィールドをリセットする関数
-def reset_inputs(keys):
-    for k in keys:
-        if "t_type" in k:
-            st.session_state[k] = "指定なし"
-        else:
-            st.session_state[k] = ""
-
-# 時間選択用UI
-def time_selector_ui(key_prefix):
+# 時間選択用UI (Form内で使用するために key を外部から受け取る)
+def time_selector_ui(key_prefix, is_in_form=False):
     t_type = st.selectbox("時間指定", ["指定なし", "午前中", "午後", "終日", "カスタム"], key=f"t_type_{key_prefix}")
     if t_type == "カスタム":
         col_c1, col_c2 = st.columns(2)
@@ -178,21 +164,22 @@ tab1, tab2, tab3 = st.tabs(["📍 行きたい", "📅 予定", "🚫 NG日"])
 # --- タブ1: 行きたいリスト ---
 with tab1:
     with st.expander("＋ 追加する"):
-        t = st.text_input("場所/内容", key="add_t")
-        u = st.text_input("URL", key="add_u")
-        m = st.text_area("メモ", key="add_m")
-        wt = time_selector_ui("wish")
-        if st.button("追加", use_container_width=True, type="primary", key="add_wish_btn"):
-            if t:
-                get_events_ref().add({
-                    "roomKey": room_key, "title": t, "url": u, "memo": m, 
-                    "userName": user_name, "status": "wishlist", "comments": [], 
-                    "time": wt, "createdAt": get_jst_now().isoformat()
-                })
-                reset_inputs(["add_t", "add_u", "add_m", "t_type_wish"])
-                st.rerun()
-            else:
-                st.warning("場所/内容を入力してください")
+        # st.form を使うことで、送信後のリセットを自動化する
+        with st.form(key="wish_add_form", clear_on_submit=True):
+            t = st.text_input("場所/内容")
+            u = st.text_input("URL")
+            m = st.text_area("メモ")
+            wt = time_selector_ui("wish", is_in_form=True)
+            if st.form_submit_button("追加", use_container_width=True, type="primary"):
+                if t:
+                    get_events_ref().add({
+                        "roomKey": room_key, "title": t, "url": u, "memo": m, 
+                        "userName": user_name, "status": "wishlist", "comments": [], 
+                        "time": wt, "createdAt": get_jst_now().isoformat()
+                    })
+                    st.rerun()
+                else:
+                    st.warning("場所/内容を入力してください")
 
     for item in [e for e in events if e.get("status") == "wishlist"]:
         with st.container(border=True):
@@ -308,13 +295,13 @@ with tab2:
 # --- タブ3: NG日 ---
 with tab3:
     st.subheader("🚫 NG日を登録")
-    nd = st.date_input("行けない日", value=get_jst_now().date(), key="ng_d")
-    nt_str = time_selector_ui("ng_form")
-    nr = st.text_input("理由など(任意)", key="ng_r")
-    if st.button("NG登録", use_container_width=True, type="primary", key="ng_add_btn"):
-        get_ng_ref().add({"roomKey": room_key, "userName": user_name, "date": str(nd), "reason": nr, "time": nt_str})
-        reset_inputs(["ng_r", "t_type_ng_form"])
-        st.rerun()
+    with st.form(key="ng_add_form", clear_on_submit=True):
+        nd = st.date_input("行けない日", value=get_jst_now().date())
+        nt_str = time_selector_ui("ng_form", is_in_form=True)
+        nr = st.text_input("理由など(任意)")
+        if st.form_submit_button("NG登録", use_container_width=True, type="primary"):
+            get_ng_ref().add({"roomKey": room_key, "userName": user_name, "date": str(nd), "reason": nr, "time": nt_str})
+            st.rerun()
     
     st.divider()
     upcoming_ng = sorted([n for n in ng_dates if n["date"] >= today_str], key=lambda x: (x["date"], x.get("time") or "00:00"))
@@ -329,24 +316,4 @@ with tab3:
                 nr2 = st.text_input("理由変更", n.get("reason","") if n.get("reason") else "", key=f"nr2_{n['id']}")
                 c1, c2, c3 = st.columns(3)
                 if c1.button("保存", key=f"sv_ng_{n['id']}", use_container_width=True, type="primary"):
-                    get_ng_ref().document(n["id"]).update({"date":str(nd2), "reason":nr2, "time":nt2 if nt2 else None})
-                    st.session_state.edit_id = None; st.rerun()
-                if c2.button("キャンセル", key=f"cn_ng_{n['id']}", use_container_width=True):
-                    st.session_state.edit_id = None; st.rerun()
-                if c3.button("削除", key=f"del_ng_{n['id']}", use_container_width=True):
-                    get_ng_ref().document(n["id"]).delete()
-                    st.session_state.edit_id = None; st.rerun()
-            else:
-                c1, c2, c3 = st.columns([3, 5, 1])
-                dt_obj = datetime.strptime(n["date"], "%Y-%m-%d")
-                date_with_day = f"{n['date']}({get_weekday_jp(dt_obj)})"
-                n_time_str = f" <span class='time-badge'>{n['time']}</span>" if n.get("time") else ""
-                c1.markdown(f"<span class='{cls}'><b>{date_with_day}{n_time_str}</b></span>", unsafe_allow_html=True)
-                c2.markdown(f"<span class='{cls}'>{n.get('userName','')} : {n.get('reason','')}</span>", unsafe_allow_html=True)
-                if c3.button("📝", key=f"ed_ng_{n['id']}"): st.session_state.edit_id = n["id"]; st.rerun()
-
-    st.subheader("📍 今後のNG日")
-    for n in upcoming_ng: show_ng_item(n)
-    if past_ng:
-        with st.expander("⌛ 過去のNG日"):
-            for n in past_ng: show_ng_item(n, is_past=True)
+                    get_ng_ref().document(n["id"]).update({"date":str(nd2), "reason":nr2
