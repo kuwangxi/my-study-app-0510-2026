@@ -13,6 +13,13 @@ st.set_page_config(page_title="ふたりの共有ノート", page_icon="🤝", l
 if "font_size" not in st.session_state: st.session_state.font_size = 14
 if "show_summary" not in st.session_state: st.session_state.show_summary = True
 if "hide_empty_days" not in st.session_state: st.session_state.hide_empty_days = False
+if "edit_id" not in st.session_state: st.session_state.edit_id = None
+
+# 入力リセット用の初期化
+input_keys = ["add_t", "add_u", "add_m", "ng_r", "t_type_wish", "t_type_ng_form"]
+for k in input_keys:
+    if k not in st.session_state:
+        st.session_state[k] = "" if "t_type" not in k else "指定なし"
 
 # CSSの定義
 st.markdown(f"""
@@ -72,7 +79,15 @@ def get_events_ref(): return db.collection('artifacts').document(APP_ID).collect
 def get_ng_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_ng_dates')
 def get_rooms_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_rooms')
 
-# 時間選択用共通UI関数（form外で使うため即時反映されます）
+# 入力フィールドをリセットする関数
+def reset_inputs(keys):
+    for k in keys:
+        if "t_type" in k:
+            st.session_state[k] = "指定なし"
+        else:
+            st.session_state[k] = ""
+
+# 時間選択用UI
 def time_selector_ui(key_prefix):
     t_type = st.selectbox("時間指定", ["指定なし", "午前中", "午後", "終日", "カスタム"], key=f"t_type_{key_prefix}")
     if t_type == "カスタム":
@@ -88,7 +103,6 @@ def time_selector_ui(key_prefix):
 # ==========================================
 # 2. セッション管理
 # ==========================================
-if "edit_id" not in st.session_state: st.session_state.edit_id = None
 if "is_logged" not in st.session_state:
     q_room = st.query_params.get("room")
     q_user = st.query_params.get("user")
@@ -116,8 +130,6 @@ def logout():
 # ==========================================
 if st.session_state.is_logged:
     st.sidebar.title("⚙️ アプリ設定")
-    
-    # テキストサイズ変更（確定ボタン式）
     new_size = st.sidebar.slider("テキストの大きさ", 10, 24, value=st.session_state.font_size)
     if st.sidebar.button("サイズを確定する", key="btn_confirm_font_main"):
         st.session_state.font_size = new_size
@@ -151,20 +163,12 @@ if not st.session_state.is_logged or not st.session_state.user_name:
             input_key = st.text_input("秘密鍵(29桁)を入力", placeholder="XXXX-XXXX...")
             if st.button("参加する", use_container_width=True) and len(input_key) >= 29:
                 login_action(input_key, name_input); st.rerun()
-    
-    st.divider()
-    st.caption("テキストが大きすぎて操作しづらい場合はこちら")
-    login_new_size = st.slider("ログイン画面のテキストサイズ", 10, 24, st.session_state.font_size)
-    if st.button("サイズを確定する", key="btn_confirm_font_login"):
-        st.session_state.font_size = login_new_size
-        st.rerun()
     st.stop()
 
 # ==========================================
 # 5. メイン画面
 # ==========================================
 room_key, user_name = st.session_state.room_key, st.session_state.user_name
-
 events = [{"id": d.id, **d.to_dict()} for d in get_events_ref().where("roomKey", "==", room_key).stream()]
 ng_dates = [{"id": d.id, **d.to_dict()} for d in get_ng_ref().where("roomKey", "==", room_key).stream()]
 today_str = str(get_jst_now().date())
@@ -174,7 +178,6 @@ tab1, tab2, tab3 = st.tabs(["📍 行きたい", "📅 予定", "🚫 NG日"])
 # --- タブ1: 行きたいリスト ---
 with tab1:
     with st.expander("＋ 追加する"):
-        # st.formを削除して「カスタム」が即座に動くように修正
         t = st.text_input("場所/内容", key="add_t")
         u = st.text_input("URL", key="add_u")
         m = st.text_area("メモ", key="add_m")
@@ -184,9 +187,9 @@ with tab1:
                 get_events_ref().add({
                     "roomKey": room_key, "title": t, "url": u, "memo": m, 
                     "userName": user_name, "status": "wishlist", "comments": [], 
-                    "time": wt,
-                    "createdAt": get_jst_now().isoformat()
+                    "time": wt, "createdAt": get_jst_now().isoformat()
                 })
+                reset_inputs(["add_t", "add_u", "add_m", "t_type_wish"])
                 st.rerun()
             else:
                 st.warning("場所/内容を入力してください")
@@ -198,7 +201,6 @@ with tab1:
                 eu = st.text_input("編集: URL", item.get("url",""), key=f"eu_{item['id']}")
                 em = st.text_area("編集: メモ", item.get("memo",""), key=f"em_{item['id']}")
                 eti = st.text_input("編集: 時間 (自由入力)", item.get("time","") if item.get("time") else "", key=f"eti_{item['id']}")
-                
                 c1, c2, c3 = st.columns(3)
                 if c1.button("保存", key=f"sv_{item['id']}", use_container_width=True, type="primary"):
                     get_events_ref().document(item["id"]).update({"title":et, "url":eu, "memo":em, "time":eti if eti else None})
@@ -213,35 +215,22 @@ with tab1:
                 time_disp = f"<span class='time-badge'>⏰ {item['time']}</span> " if item.get("time") else ""
                 c1.markdown(f"### {time_disp}{item['title']}", unsafe_allow_html=True)
                 if c2.button("📝", key=f"ed_{item['id']}"): st.session_state.edit_id = item["id"]; st.rerun()
-                
                 if item.get("url"): st.markdown(f"[🔗 リンク]({item['url']})")
                 if item.get("memo"): st.info(item["memo"])
-                
                 with st.expander("💬 相談・確定"):
                     for c in item.get("comments", []): st.write(f"**{c['userName']}**: {c['text']}")
                     with st.form(key=f"comment_form_{item['id']}", clear_on_submit=True):
                         cc1, cc2 = st.columns([3,1])
                         new_c = cc1.text_input("メッセージ", placeholder="メッセージを入力...")
                         if cc2.form_submit_button("送信", use_container_width=True) and new_c:
-                            get_events_ref().document(item["id"]).update({
-                                "comments": firestore.ArrayUnion([{
-                                    "userName": user_name, 
-                                    "text": new_c, 
-                                    "createdAt": get_jst_now().isoformat()
-                                }])
-                            })
+                            get_events_ref().document(item["id"]).update({"comments": firestore.ArrayUnion([{"userName": user_name, "text": new_c, "createdAt": get_jst_now().isoformat()}])})
                             st.rerun()
-                    
                     st.divider()
                     st.write("確定情報を入力してください")
                     sd = st.date_input("確定日", value=get_jst_now().date(), key=f"sd_{item['id']}")
                     st_time = time_selector_ui(f"fix_{item['id']}")
                     if st.button("この日で確定", key=f"fix_btn_{item['id']}"):
-                        get_events_ref().document(item['id']).update({
-                            "status": "scheduled", 
-                            "date": str(sd),
-                            "time": st_time
-                        })
+                        get_events_ref().document(item['id']).update({"status": "scheduled", "date": str(sd), "time": st_time})
                         st.rerun()
 
 # --- タブ2: 予定 ---
@@ -252,36 +241,27 @@ with tab2:
         duration = col_dur2.selectbox("表示期間", ["1週間", "2週間", "1ヶ月"], index=0)
         days_count = {"1週間": 7, "2週間": 14, "1ヶ月": 30}[duration]
         
-        summary_container = st.container()
-        with summary_container:
-            display_days = []
-            for i in range(days_count):
-                target_date = get_jst_now().date() + timedelta(days=i)
-                t_str = str(target_date)
-                day_events = [e for e in events if e.get("date") == t_str]
-                day_ng = [n for n in ng_dates if n.get("date") == t_str]
-                if st.session_state.hide_empty_days and not day_events and not day_ng:
-                    continue
-                display_days.append((target_date, t_str, day_events, day_ng, i == 0))
+        display_days = []
+        for i in range(days_count):
+            target_date = get_jst_now().date() + timedelta(days=i)
+            t_str = str(target_date)
+            day_events = [e for e in events if e.get("date") == t_str]
+            day_ng = [n for n in ng_dates if n.get("date") == t_str]
+            if st.session_state.hide_empty_days and not day_events and not day_ng: continue
+            display_days.append((target_date, t_str, day_events, day_ng, i == 0))
 
-            if not display_days:
-                st.caption("表示期間内に予定はありません")
-            else:
-                cols = st.columns(7)
-                for idx, (target_date, t_str, day_events, day_ng, is_today) in enumerate(display_days):
-                    with cols[idx % 7]:
-                        bg_cls = "calendar-today" if is_today else ""
-                        content = "・"
-                        if day_events: content = "📍"
-                        if day_ng: content = "🚫"
-                        if day_events and day_ng: content = "⚠️"
-                        date_label = f"{target_date.strftime('%m/%d')}({get_weekday_jp(target_date)})"
-                        st.markdown(f"""
-                            <div class="calendar-card {bg_cls}">
-                                <div class="calendar-date">{date_label}</div>
-                                <div>{content}</div>
-                            </div>
-                        """, unsafe_allow_html=True)
+        if not display_days: st.caption("表示期間内に予定はありません")
+        else:
+            cols = st.columns(7)
+            for idx, (target_date, t_str, day_events, day_ng, is_today) in enumerate(display_days):
+                with cols[idx % 7]:
+                    bg_cls = "calendar-today" if is_today else ""
+                    content = "・"
+                    if day_events: content = "📍"
+                    if day_ng: content = "🚫"
+                    if day_events and day_ng: content = "⚠️"
+                    date_label = f"{target_date.strftime('%m/%d')}({get_weekday_jp(target_date)})"
+                    st.markdown(f'<div class="calendar-card {bg_cls}"><div class="calendar-date">{date_label}</div><div>{content}</div></div>', unsafe_allow_html=True)
         st.divider()
 
     sched = [e for e in events if e.get("status") == "scheduled"]
@@ -306,16 +286,15 @@ with tab2:
                     st.session_state.edit_id = None; st.rerun()
             else:
                 c1, c2, c3 = st.columns([3, 4, 1])
-                time_str = f" {item['time']}" if item.get("time") else ""
                 dt_obj = datetime.strptime(item["date"], "%Y-%m-%d")
                 date_with_day = f"{item['date']}({get_weekday_jp(dt_obj)})"
+                time_str = f" {item['time']}" if item.get("time") else ""
                 c1.markdown(f"<p class='{cls}'><b>📅 {date_with_day}{time_str}</b></p>", unsafe_allow_html=True)
                 c2.markdown(f"<p class='{cls}'><b>{item['title']}</b></p>", unsafe_allow_html=True)
                 if c3.button("📝", key=f"ed_s_{item['id']}"): st.session_state.edit_id = item["id"]; st.rerun()
                 col_b1, col_b2 = st.columns(2)
                 if col_b1.button("💬 履歴", key=f"hist_{item['id']}", use_container_width=True):
-                    with st.container():
-                        st.info("\n".join([f"{c['userName']}: {c['text']}" for c in item.get("comments", [])]) or "やり取りはありません")
+                    st.info("\n".join([f"{c['userName']}: {c['text']}" for c in item.get("comments", [])]) or "やり取りはありません")
                 if col_b2.button("「行きたい」に戻す", key=f"rev_{item['id']}", use_container_width=True):
                     get_events_ref().document(item["id"]).update({"status":"wishlist", "date":None}); st.rerun()
 
@@ -329,15 +308,12 @@ with tab2:
 # --- タブ3: NG日 ---
 with tab3:
     st.subheader("🚫 NG日を登録")
-    # st.formを削除して即時反映に対応
     nd = st.date_input("行けない日", value=get_jst_now().date(), key="ng_d")
     nt_str = time_selector_ui("ng_form")
     nr = st.text_input("理由など(任意)", key="ng_r")
     if st.button("NG登録", use_container_width=True, type="primary", key="ng_add_btn"):
-        get_ng_ref().add({
-            "roomKey": room_key, "userName": user_name, 
-            "date": str(nd), "reason": nr, "time": nt_str
-        })
+        get_ng_ref().add({"roomKey": room_key, "userName": user_name, "date": str(nd), "reason": nr, "time": nt_str})
+        reset_inputs(["ng_r", "t_type_ng_form"])
         st.rerun()
     
     st.divider()
