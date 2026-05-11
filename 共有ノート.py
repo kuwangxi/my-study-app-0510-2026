@@ -73,7 +73,7 @@ def get_events_ref(): return db.collection('artifacts').document(APP_ID).collect
 def get_ng_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_ng_dates')
 def get_rooms_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_rooms')
 
-# 時間選択用UI (Form内で使用するために key を外部から受け取る)
+# 時間選択用UI
 def time_selector_ui(key_prefix, is_in_form=False):
     t_type = st.selectbox("時間指定", ["指定なし", "午前中", "午後", "終日", "カスタム"], key=f"t_type_{key_prefix}")
     if t_type == "カスタム":
@@ -164,7 +164,6 @@ tab1, tab2, tab3 = st.tabs(["📍 行きたい", "📅 予定", "🚫 NG日"])
 # --- タブ1: 行きたいリスト ---
 with tab1:
     with st.expander("＋ 追加する"):
-        # st.form を使うことで、送信後のリセットを自動化する
         with st.form(key="wish_add_form", clear_on_submit=True):
             t = st.text_input("場所/内容")
             u = st.text_input("URL")
@@ -316,4 +315,28 @@ with tab3:
                 nr2 = st.text_input("理由変更", n.get("reason","") if n.get("reason") else "", key=f"nr2_{n['id']}")
                 c1, c2, c3 = st.columns(3)
                 if c1.button("保存", key=f"sv_ng_{n['id']}", use_container_width=True, type="primary"):
-                    get_ng_ref().document(n["id"]).update({"date":str(nd2), "reason":nr2
+                    get_ng_ref().document(n["id"]).update({
+                        "date": str(nd2), 
+                        "reason": nr2, 
+                        "time": nt2 if nt2 else None
+                    })
+                    st.session_state.edit_id = None; st.rerun()
+                if c2.button("キャンセル", key=f"cn_ng_{n['id']}", use_container_width=True):
+                    st.session_state.edit_id = None; st.rerun()
+                if c3.button("削除", key=f"del_ng_{n['id']}", use_container_width=True):
+                    get_ng_ref().document(n["id"]).delete()
+                    st.session_state.edit_id = None; st.rerun()
+            else:
+                c1, c2, c3 = st.columns([3, 5, 1])
+                dt_obj = datetime.strptime(n["date"], "%Y-%m-%d")
+                date_with_day = f"{n['date']}({get_weekday_jp(dt_obj)})"
+                n_time_str = f" <span class='time-badge'>{n['time']}</span>" if n.get("time") else ""
+                c1.markdown(f"<span class='{cls}'><b>{date_with_day}{n_time_str}</b></span>", unsafe_allow_html=True)
+                c2.markdown(f"<span class='{cls}'>{n.get('userName','')} : {n.get('reason','')}</span>", unsafe_allow_html=True)
+                if c3.button("📝", key=f"ed_ng_{n['id']}"): st.session_state.edit_id = n["id"]; st.rerun()
+
+    st.subheader("📍 今後のNG日")
+    for n in upcoming_ng: show_ng_item(n)
+    if past_ng:
+        with st.expander("⌛ 過去のNG日"):
+            for n in past_ng: show_ng_item(n, is_past=True)
