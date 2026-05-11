@@ -9,34 +9,52 @@ from datetime import datetime, timedelta, timezone
 # ==========================================
 st.set_page_config(page_title="ふたりの共有ノート", page_icon="🤝", layout="centered")
 
-# CSSの定義
-st.markdown("""
+# セッション状態の初期化（設定用）
+if "font_size" not in st.session_state: st.session_state.font_size = 14
+if "show_summary" not in st.session_state: st.session_state.show_summary = True
+if "hide_empty_days" not in st.session_state: st.session_state.hide_empty_days = False
+
+# CSSの定義（動的なフォントサイズとダークモード対応）
+st.markdown(f"""
 <style>
-    .past-item { color: #9e9e9e; }
-    .calendar-card {
-        background-color: #f0f2f6;
-        border-radius: 10px;
-        padding: 5px;
+    /* 全体のフォントサイズ調整 */
+    html, body, [class*="st-"] {{
+        font-size: {st.session_state.font_size}px !important;
+    }}
+    .past-item {{ color: #9e9e9e; }}
+    .calendar-card {{
+        background-color: rgba(128, 128, 128, 0.1);
+        border-radius: 8px;
+        padding: 8px 2px;
         text-align: center;
-        border: 1px solid #ddd;
-        font-size: 0.8rem;
-    }
-    .calendar-today {
-        background-color: #ffe4e6;
+        border: 1px solid rgba(128, 128, 128, 0.3);
+        margin-bottom: 5px;
+    }}
+    /* 日付の視認性向上（太字・カラー） */
+    .calendar-date {{
+        font-weight: bold;
+        color: #f43f5e; 
+        font-size: 0.9em;
+    }}
+    .calendar-today {{
+        background-color: rgba(244, 63, 94, 0.2);
         border: 2px solid #f43f5e;
-    }
-    .time-badge {
-        background-color: #eee;
+    }}
+    .time-badge {{
+        background-color: rgba(128, 128, 128, 0.2);
         padding: 2px 5px;
         border-radius: 4px;
-        font-size: 0.8rem;
-        color: #333;
-    }
+        font-size: 0.8em;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
 def get_jst_now():
     return datetime.now(timezone(timedelta(hours=9)))
+
+def get_weekday_jp(dt):
+    w_list = ['月', '火', '水', '木', '金', '土', '日']
+    return w_list[dt.weekday()]
 
 if not firebase_admin._apps:
     try:
@@ -96,7 +114,24 @@ def logout():
     st.rerun()
 
 # ==========================================
-# 3. ログイン画面
+# 3. サイドバー（設定・ログアウト）
+# ==========================================
+if st.session_state.is_logged:
+    st.sidebar.title("⚙️ アプリ設定")
+    st.session_state.font_size = st.sidebar.slider("テキストの大きさ", 10, 24, st.session_state.font_size)
+    
+    st.sidebar.divider()
+    st.session_state.show_summary = st.sidebar.checkbox("カレンダーサマリーを表示", value=st.session_state.show_summary)
+    if st.session_state.show_summary:
+        st.session_state.hide_empty_days = st.sidebar.checkbox("予定がある日のみ表示", value=st.session_state.hide_empty_days)
+    
+    st.sidebar.divider()
+    st.sidebar.caption(f"User: {st.session_state.user_name}")
+    st.sidebar.caption(f"Key: {st.session_state.room_key}")
+    if st.sidebar.button("ログアウト", use_container_width=True): logout()
+
+# ==========================================
+# 4. ログイン画面
 # ==========================================
 if not st.session_state.is_logged or not st.session_state.user_name:
     st.markdown("<h1 style='text-align: center; color: #f43f5e;'>Shared Note Sync</h1>", unsafe_allow_html=True)
@@ -113,14 +148,16 @@ if not st.session_state.is_logged or not st.session_state.user_name:
             input_key = st.text_input("秘密鍵(29桁)を入力", placeholder="XXXX-XXXX...")
             if st.button("参加する", use_container_width=True) and len(input_key) >= 29:
                 login_action(input_key, name_input); st.rerun()
+    
+    st.divider()
+    st.caption("テキストが大きすぎて操作しづらい場合はこちら")
+    st.session_state.font_size = st.slider("ログイン画面のテキストサイズ", 10, 24, st.session_state.font_size, key="login_font_slider")
     st.stop()
 
 # ==========================================
-# 4. メイン画面
+# 5. メイン画面
 # ==========================================
 room_key, user_name = st.session_state.room_key, st.session_state.user_name
-st.sidebar.caption(f"User: {user_name} / Key: {room_key}")
-if st.sidebar.button("ログアウト"): logout()
 
 # データ一括取得
 events = [{"id": d.id, **d.to_dict()} for d in get_events_ref().where("roomKey", "==", room_key).stream()]
@@ -132,7 +169,6 @@ tab1, tab2, tab3 = st.tabs(["📍 行きたい", "📅 予定", "🚫 NG日"])
 # --- タブ1: 行きたいリスト ---
 with tab1:
     with st.expander("＋ 追加する"):
-        # フォーム化して送信時にリセット
         with st.form(key="add_wish_form", clear_on_submit=True):
             t = st.text_input("場所/内容")
             u = st.text_input("URL")
@@ -178,8 +214,6 @@ with tab1:
                 
                 with st.expander("💬 相談・確定"):
                     for c in item.get("comments", []): st.write(f"**{c['userName']}**: {c['text']}")
-                    
-                    # コメント送信フォーム
                     with st.form(key=f"comment_form_{item['id']}", clear_on_submit=True):
                         cc1, cc2 = st.columns([3,1])
                         new_c = cc1.text_input("メッセージ", placeholder="メッセージを入力...")
@@ -207,31 +241,49 @@ with tab1:
 
 # --- タブ2: 予定 ---
 with tab2:
-    col_dur1, col_dur2 = st.columns([2,1])
-    with col_dur1: st.markdown("#### 🗓️ カレンダーサマリー")
-    duration = col_dur2.selectbox("表示期間", ["1週間", "2週間", "1ヶ月"], index=0)
-    days_count = {"1週間": 7, "2週間": 14, "1ヶ月": 30}[duration]
-    
-    with st.container():
-        cols = st.columns(7) 
-        for i in range(days_count):
-            target_date = get_jst_now().date() + timedelta(days=i)
-            t_str = str(target_date)
-            is_today = (i == 0)
-            day_events = [e for e in events if e.get("date") == t_str]
-            day_ng = [n for n in ng_dates if n.get("date") == t_str]
-            
-            with cols[i % 7]:
-                bg_cls = "calendar-today" if is_today else ""
-                content = "・"
-                if day_events: content = "📍"
-                if day_ng: content = "🚫"
-                if day_events and day_ng: content = "⚠️"
-                st.markdown(f"""<div class="calendar-card {bg_cls}"><b>{target_date.strftime('%m/%d')}</b><br>{content}</div>""", unsafe_allow_html=True)
-            if (i + 1) % 7 == 0 and i + 1 < days_count:
-                st.write("")
+    # カレンダーサマリー
+    if st.session_state.show_summary:
+        col_dur1, col_dur2 = st.columns([2,1])
+        with col_dur1: st.markdown("#### 🗓️ カレンダーサマリー")
+        duration = col_dur2.selectbox("表示期間", ["1週間", "2週間", "1ヶ月"], index=0)
+        days_count = {"1週間": 7, "2週間": 14, "1ヶ月": 30}[duration]
+        
+        summary_container = st.container()
+        with summary_container:
+            display_days = []
+            for i in range(days_count):
+                target_date = get_jst_now().date() + timedelta(days=i)
+                t_str = str(target_date)
+                day_events = [e for e in events if e.get("date") == t_str]
+                day_ng = [n for n in ng_dates if n.get("date") == t_str]
+                
+                # 「予定がある日のみ」設定がONの場合、何もない日はスキップ
+                if st.session_state.hide_empty_days and not day_events and not day_ng:
+                    continue
+                display_days.append((target_date, t_str, day_events, day_ng, i == 0))
 
-    st.divider()
+            if not display_days:
+                st.caption("表示期間内に予定はありません")
+            else:
+                cols = st.columns(7)
+                for idx, (target_date, t_str, day_events, day_ng, is_today) in enumerate(display_days):
+                    with cols[idx % 7]:
+                        bg_cls = "calendar-today" if is_today else ""
+                        content = "・"
+                        if day_events: content = "📍"
+                        if day_ng: content = "🚫"
+                        if day_events and day_ng: content = "⚠️"
+                        
+                        # 日付 + 曜日の表示
+                        date_label = f"{target_date.strftime('%m/%d')}({get_weekday_jp(target_date)})"
+                        st.markdown(f"""
+                            <div class="calendar-card {bg_cls}">
+                                <div class="calendar-date">{date_label}</div>
+                                <div>{content}</div>
+                            </div>
+                        """, unsafe_allow_html=True)
+        st.divider()
+
     sched = [e for e in events if e.get("status") == "scheduled"]
     upcoming = sorted([e for e in sched if e["date"] >= today_str], key=lambda x: (x["date"], x.get("time") or "99:99"))
     past = sorted([e for e in sched if e["date"] < today_str], key=lambda x: (x["date"], x.get("time") or "99:99"), reverse=True)
@@ -253,9 +305,11 @@ with tab2:
                     get_events_ref().document(item["id"]).delete()
                     st.session_state.edit_id = None; st.rerun()
             else:
-                c1, c2, c3 = st.columns([2, 5, 1])
+                c1, c2, c3 = st.columns([3, 4, 1])
                 time_str = f" {item['time']}" if item.get("time") else ""
-                c1.markdown(f"<p class='{cls}'><b>📅 {item['date']}{time_str}</b></p>", unsafe_allow_html=True)
+                dt_obj = datetime.strptime(item["date"], "%Y-%m-%d")
+                date_with_day = f"{item['date']}({get_weekday_jp(dt_obj)})"
+                c1.markdown(f"<p class='{cls}'><b>📅 {date_with_day}{time_str}</b></p>", unsafe_allow_html=True)
                 c2.markdown(f"<p class='{cls}'><b>{item['title']}</b></p>", unsafe_allow_html=True)
                 if c3.button("📝", key=f"ed_s_{item['id']}"): st.session_state.edit_id = item["id"]; st.rerun()
                 col_b1, col_b2 = st.columns(2)
@@ -309,13 +363,14 @@ with tab3:
                     st.session_state.edit_id = None; st.rerun()
             else:
                 c1, c2, c3 = st.columns([3, 5, 1])
+                dt_obj = datetime.strptime(n["date"], "%Y-%m-%d")
+                date_with_day = f"{n['date']}({get_weekday_jp(dt_obj)})"
                 n_time_str = f" <span class='time-badge'>{n['time']}</span>" if n.get("time") else ""
-                c1.markdown(f"<span class='{cls}'><b>{n['date']}{n_time_str}</b></span>", unsafe_allow_html=True)
+                c1.markdown(f"<span class='{cls}'><b>{date_with_day}{n_time_str}</b></span>", unsafe_allow_html=True)
                 c2.markdown(f"<span class='{cls}'>{n.get('userName','')} : {n.get('reason','')}</span>", unsafe_allow_html=True)
                 if c3.button("📝", key=f"ed_ng_{n['id']}"): st.session_state.edit_id = n["id"]; st.rerun()
 
     st.subheader("📍 今後のNG日")
-    if not upcoming_ng: st.write("NG日の登録はありません")
     for n in upcoming_ng: show_ng_item(n)
     if past_ng:
         with st.expander("⌛ 過去のNG日"):
