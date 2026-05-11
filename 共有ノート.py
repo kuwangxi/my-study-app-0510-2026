@@ -178,9 +178,13 @@ with tab1:
                 with st.expander("💬 相談・確定"):
                     for c in item.get("comments", []): st.write(f"**{c['userName']}**: {c['text']}")
                     cc1, cc2 = st.columns([3,1])
-                    new_c = cc1.text_input("メッセージ", key=f"nc_{item['id']}")
+                    msg_key = f"nc_{item['id']}"
+                    new_c = cc1.text_input("メッセージ", key=msg_key)
                     if cc2.button("送信", key=f"nb_{item['id']}") and new_c:
                         get_events_ref().document(item["id"]).update({"comments": firestore.ArrayUnion([{"userName":user_name, "text":new_c, "createdAt":get_jst_now().isoformat()}])})
+                        # 入力値をクリアするためにセッションから削除してリラン
+                        if msg_key in st.session_state:
+                            st.session_state[msg_key] = ""
                         st.rerun()
                     st.divider()
                     st.write("確定情報を入力してください")
@@ -254,7 +258,6 @@ with tab2:
                 
                 col_b1, col_b2 = st.columns(2)
                 if col_b1.button("💬 履歴", key=f"hist_{item['id']}", use_container_width=True):
-                    # 表示用コンテナを作成
                     with st.container():
                         st.info("\n".join([f"{c['userName']}: {c['text']}" for c in item.get("comments", [])]) or "やり取りはありません")
                         if st.button("履歴を閉じる", key=f"close_hist_{item['id']}"):
