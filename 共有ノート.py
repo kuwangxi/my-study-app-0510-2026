@@ -151,7 +151,6 @@ with tab1:
 
 # --- タブ2: 予定 ---
 with tab2:
-    # カレンダーサマリー
     st.markdown("#### 🗓️ 直近1週間の予定")
     cols = st.columns(7)
     for i in range(7):
@@ -171,7 +170,6 @@ with tab2:
 
     st.divider()
     
-    # 予定の振り分け
     sched = [e for e in events if e.get("status") == "scheduled"]
     upcoming = sorted([e for e in sched if e["date"] >= today_str], key=lambda x: x["date"])
     past = sorted([e for e in sched if e["date"] < today_str], key=lambda x: x["date"], reverse=True)
@@ -180,8 +178,8 @@ with tab2:
         cls = "past-item" if is_past else ""
         with st.container(border=True):
             if st.session_state.edit_id == item["id"]:
-                new_date = st.date_input("日付変更", value=datetime.strptime(item["date"], "%Y-%m-%d").date())
-                new_title = st.text_input("タイトル", item["title"])
+                new_date = st.date_input("日付変更", value=datetime.strptime(item["date"], "%Y-%m-%d").date(), key=f"nd_edit_{item['id']}")
+                new_title = st.text_input("タイトル", item["title"], key=f"nt_edit_{item['id']}")
                 if st.button("更新", key=f"ups_{item['id']}"):
                     get_events_ref().document(item["id"]).update({"date":str(new_date), "title":new_title})
                     st.session_state.edit_id = None; st.rerun()
@@ -234,7 +232,8 @@ with tab3:
                 c1.markdown(f"<span class='{cls}'><b>{n['date']}</b></span>", unsafe_allow_html=True)
                 c2.markdown(f"<span class='{cls}'>{n.get('userName','')} : {n.get('reason','')}</span>", unsafe_allow_html=True)
                 if c3.button("📝", key=f"ed_ng_{n['id']}"): st.session_state.edit_id = n["id"]; st.rerun()
-                if st.button("削除", key=f"dn_{n['id']}", size="small"):
+                # size="small" を削除して修正
+                if st.button("削除", key=f"dn_{n['id']}"):
                     get_ng_ref().document(n["id"]).delete(); st.rerun()
 
     st.subheader("📍 今後のNG日")
