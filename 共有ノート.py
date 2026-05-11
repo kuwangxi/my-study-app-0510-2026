@@ -2,7 +2,6 @@ import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
 import random
-import uuid
 from datetime import datetime, timedelta, timezone
 
 # ==========================================
@@ -42,8 +41,18 @@ def get_rooms_ref():
     return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_rooms')
 
 # ==========================================
-# 2. セッション管理 & コールバック
+# 2. セッション管理 & ログイン維持 (iPhone対策)
 # ==========================================
+
+# URLパラメータから情報を復元（iPhone等でのリフレッシュ対策）
+if "is_logged" not in st.session_state or not st.session_state.is_logged:
+    q_room = st.query_params.get("room")
+    q_user = st.query_params.get("user")
+    if q_room and q_user:
+        st.session_state.room_key = q_room
+        st.session_state.user_name = q_user
+        st.session_state.is_logged = True
+
 if "user_name" not in st.session_state:
     st.session_state.user_name = ""
 
@@ -64,7 +73,6 @@ def send_comment_callback(item_id, input_key, user_name):
                 "createdAt": get_jst_now().isoformat()
             }])
         })
-        # 送信後に中身を空にする
         st.session_state[input_key] = ""
 
 def generate_secure_key():
@@ -72,10 +80,19 @@ def generate_secure_key():
     parts = [''.join(random.choices(chars, k=4)) for _ in range(7)]
     return '-'.join(parts) + '-' + random.choice(chars)
 
+def login_action(room, user):
+    st.session_state.room_key = room
+    st.session_state.user_name = user
+    st.session_state.is_logged = True
+    # URLにパラメータを保存してログイン維持を強化
+    st.query_params["room"] = room
+    st.query_params["user"] = user
+
 def logout():
     st.session_state.is_logged = False
     st.session_state.room_key = ""
     st.session_state.user_name = ""
+    st.query_params.clear()
     st.rerun()
 
 # ==========================================
@@ -102,17 +119,16 @@ if not st.session_state.is_logged or not st.session_state.user_name:
                     'createdAt': get_jst_now().isoformat(),
                     'creator': st.session_state.user_name
                 })
-                st.session_state.room_key = new_key
-                st.session_state.is_logged = True
+                login_action(new_key, st.session_state.user_name)
                 st.rerun()
 
         with col2:
             st.subheader("既存のノートに参加")
             input_key_login = st.text_input("29桁の秘密鍵を入力", placeholder="XXXX-XXXX...")
             if st.button("参加する", use_container_width=True):
-                if len(input_key_login.strip()) >= 29:
-                    st.session_state.room_key = input_key_login.strip()
-                    st.session_state.is_logged = True
+                clean_key = input_key_login.strip()
+                if len(clean_key) >= 29:
+                    login_action(clean_key, st.session_state.user_name)
                     st.rerun()
                 else:
                     st.warning("正しい29桁の鍵を入力してください。")
@@ -169,12 +185,8 @@ with tab1:
                 st.rerun()
                 
             st.caption(f"追加: {item.get('userName', '不明')}")
-            
-            if item.get("memo"):
-                st.info(f"📝 {item['memo']}")
-                
-            if item.get("url"): 
-                st.markdown(f"[🔗 リンク]({item['url']})")
+            if item.get("memo"): st.info(f"📝 {item['memo']}")
+            if item.get("url"): st.markdown(f"[🔗 リンク]({item['url']})")
             
             prefs = item.get("preferences", {})
             my_pref = prefs.get(user_name, "")
@@ -199,13 +211,7 @@ with tab1:
                 col_c, col_b = st.columns([3, 1])
                 input_key = f"ci_{item['id']}"
                 new_comment = col_c.text_input("相談...", key=input_key)
-                
-                col_b.button(
-                    "送信", 
-                    key=f"cb_{item['id']}", 
-                    on_click=send_comment_callback, 
-                    args=(item["id"], input_key, user_name)
-                )
+                col_b.button("送信", key=f"cb_{item['id']}", on_click=send_comment_callback, args=(item["id"], input_key, user_name))
 
                 st.write("---")
                 sel_date = st.date_input("確定日", value=get_jst_now().date(), key=f"di_{item['id']}")
@@ -214,7 +220,14 @@ with tab1:
 
                 t_type = st.selectbox("時間", ["all", "morning", "afternoon", "custom"], 
                                      format_func=lambda x: {"all":"終日", "morning":"午前", "afternoon":"午後", "custom":"カスタム"}[x], key=f"ti_{item['id']}")
-                c_time = st.text_input("カスタム時間入力", key=f"cti_{item['id']}") if t_type == "custom" else ""
+                
+                # 行きたいリスト内でのカスタム時間指定もプルダウン化
+                c_time = ""
+                if t_type == "custom":
+                    cc1, cc2 = st.columns(2)
+                    h_start = cc1.selectbox("開始", [f"{i:02d}:00" for i in range(24)], index=18, key=f"hs_{item['id']}")
+                    h_end = cc2.selectbox("終了", [f"{i:02d}:00" for i in range(24)], index=22, key=f"he_{item['id']}")
+                    c_time = f"{h_start}～{h_end}"
 
                 if st.button("予定を確定", key=f"fi_{item['id']}", type="primary", use_container_width=True):
                     get_events_ref().document(item["id"]).update({
@@ -229,24 +242,22 @@ with tab2:
     scheduled.sort(key=lambda x: x.get("date", ""))
 
     for item in scheduled:
-        t_label = {"all":"終日", "morning":"午前", "afternoon":"午後", "custom": item.get("customTime", "")}.get(item.get("timeType"), "")
+        # 時間ラベルの表示ロジック修正
+        t_type = item.get("timeType", "all")
+        if t_type == "custom":
+            t_label = item.get("customTime", "時間指定なし")
+        else:
+            t_label = {"all":"終日", "morning":"午前", "afternoon":"午後"}.get(t_type, "")
         
         with st.container(border=True):
             date_col, title_col = st.columns([1, 2])
-            
             with date_col:
                 st.markdown(f"#### 📅 {item['date']}")
                 st.caption(f"⏰ {t_label}")
-            
             with title_col:
                 st.markdown(f"### {item['title']}")
-                
-                # ここでURLを表示するように追加
-                if item.get("url"): 
-                    st.markdown(f"[🔗 リンク]({item['url']})")
-                    
-                if item.get("memo"):
-                    st.caption(f"📝 {item['memo']}")
+                if item.get("url"): st.markdown(f"[🔗 リンク]({item['url']})")
+                if item.get("memo"): st.caption(f"📝 {item['memo']}")
                 
                 btn_col1, btn_col2 = st.columns(2)
                 if btn_col1.button("リストに戻す", key=f"rev_{item['id']}", use_container_width=True):
@@ -259,34 +270,51 @@ with tab2:
 # --- タブ3: NG日 ---
 with tab3:
     st.subheader("NG予定の登録")
-    with st.form("ng_form", clear_on_submit=True):
-        ng_d = st.date_input("NGな日", value=get_jst_now().date())
-        ng_t = st.selectbox("時間帯", ["all", "morning", "afternoon", "custom"], 
-                            format_func=lambda x: {"all":"終日", "morning":"午前", "afternoon":"午後", "custom":"カスタム時間"}[x])
-        ng_ct = st.text_input("カスタム時間（例: 15時以降）") if ng_t == "custom" else ""
-        ng_reason = st.text_input("理由（任意）", placeholder="予定内容など、書かなくてもOK")
-        
-        if st.form_submit_button("NG日を追加", use_container_width=True):
-            get_ng_ref().add({
-                "roomKey": room_key, "userName": user_name, "date": str(ng_d),
-                "timeType": ng_t, "customTime": ng_ct, "reason": ng_reason,
-                "createdAt": get_jst_now().isoformat()
-            })
-            st.rerun()
+    
+    # リアルタイムにUIを切り替えるため、Formを使わずに実装
+    ng_d = st.date_input("NGな日", value=get_jst_now().date())
+    ng_t = st.selectbox("時間帯", ["all", "morning", "afternoon", "custom"], 
+                        format_func=lambda x: {"all":"終日", "morning":"午前", "afternoon":"午後", "custom":"カスタム時間"}[x])
+    
+    # カスタム時間選択（プルダウンメニュー形式）
+    ng_ct = ""
+    if ng_t == "custom":
+        st.write("何時から何くまで？")
+        c1, c2 = st.columns(2)
+        h_start = c1.selectbox("開始時間", [f"{i:02d}:00" for i in range(24)], index=18)
+        h_end = c2.selectbox("終了時間", [f"{i:02d}:00" for i in range(24)], index=22)
+        ng_ct = f"{h_start}～{h_end}"
+    
+    ng_reason = st.text_input("理由（任意）", placeholder="予定内容など")
+    
+    if st.button("NG日を追加", use_container_width=True, type="primary"):
+        get_ng_ref().add({
+            "roomKey": room_key, "userName": user_name, "date": str(ng_d),
+            "timeType": ng_t, "customTime": ng_ct, "reason": ng_reason,
+            "createdAt": get_jst_now().isoformat()
+        })
+        st.rerun()
     
     st.divider()
     st.subheader("NGリスト")
     ng_dates.sort(key=lambda x: x.get("date", ""))
     
     for n in ng_dates:
-        t_val = n.get("customTime") if n.get("timeType") == "custom" else {"all":"終日", "morning":"午前", "afternoon":"午後"}.get(n.get("timeType"), "")
+        # NGリストの表示不具合を修正
+        n_type = n.get("timeType", "all")
+        if n_type == "custom":
+            # カスタムの場合は(18:00～22:00)のように表示
+            t_val = f"({n.get('customTime', '時間不明')})"
+        else:
+            t_val = "(" + {"all":"終日", "morning":"午前", "afternoon":"午後"}.get(n_type, "") + ")"
+            
         reason_txt = f"理由: {n['reason']}" if n.get("reason") else "理由なし"
         
         with st.container(border=True):
             c1, c2 = st.columns([4, 1])
             with c1:
-                st.write(f"**{n['date']} ({t_val})**")
-                st.write(f"{n['userName']} - {reason_txt}")
+                st.write(f"**{n['date']} {t_val}**")
+                st.caption(f"{n['userName']} - {reason_txt}")
             with c2:
                 if n["userName"] == user_name:
                     if st.button("削除", key=f"del_ng_{n['id']}", use_container_width=True):
