@@ -73,8 +73,8 @@ def get_events_ref(): return db.collection('artifacts').document(APP_ID).collect
 def get_ng_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_ng_dates')
 def get_rooms_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_rooms')
 
-# 時間選択用UI
-def time_selector_ui(key_prefix, is_in_form=False):
+# 時間選択用UI (フォームの挙動を安定させるために修正)
+def time_selector_ui(key_prefix):
     t_type = st.selectbox("時間指定", ["指定なし", "午前中", "午後", "終日", "カスタム"], key=f"t_type_{key_prefix}")
     if t_type == "カスタム":
         col_c1, col_c2 = st.columns(2)
@@ -164,21 +164,21 @@ tab1, tab2, tab3 = st.tabs(["📍 行きたい", "📅 予定", "🚫 NG日"])
 # --- タブ1: 行きたいリスト ---
 with tab1:
     with st.expander("＋ 追加する"):
-        with st.form(key="wish_add_form", clear_on_submit=True):
-            t = st.text_input("場所/内容")
-            u = st.text_input("URL")
-            m = st.text_area("メモ")
-            wt = time_selector_ui("wish", is_in_form=True)
-            if st.form_submit_button("追加", use_container_width=True, type="primary"):
-                if t:
-                    get_events_ref().add({
-                        "roomKey": room_key, "title": t, "url": u, "memo": m, 
-                        "userName": user_name, "status": "wishlist", "comments": [], 
-                        "time": wt, "createdAt": get_jst_now().isoformat()
-                    })
-                    st.rerun()
-                else:
-                    st.warning("場所/内容を入力してください")
+        # フォームの外で時間選択を行うことで、カスタム時の入力欄を即座に表示させる
+        t = st.text_input("場所/内容", key="wish_title_input")
+        u = st.text_input("URL", key="wish_url_input")
+        m = st.text_area("メモ", key="wish_memo_input")
+        wt = time_selector_ui("wish")
+        if st.button("追加", use_container_width=True, type="primary", key="wish_add_btn"):
+            if t:
+                get_events_ref().add({
+                    "roomKey": room_key, "title": t, "url": u, "memo": m, 
+                    "userName": user_name, "status": "wishlist", "comments": [], 
+                    "time": wt, "createdAt": get_jst_now().isoformat()
+                })
+                st.rerun()
+            else:
+                st.warning("場所/内容を入力してください")
 
     for item in [e for e in events if e.get("status") == "wishlist"]:
         with st.container(border=True):
@@ -294,13 +294,13 @@ with tab2:
 # --- タブ3: NG日 ---
 with tab3:
     st.subheader("🚫 NG日を登録")
-    with st.form(key="ng_add_form", clear_on_submit=True):
-        nd = st.date_input("行けない日", value=get_jst_now().date())
-        nt_str = time_selector_ui("ng_form", is_in_form=True)
-        nr = st.text_input("理由など(任意)")
-        if st.form_submit_button("NG登録", use_container_width=True, type="primary"):
-            get_ng_ref().add({"roomKey": room_key, "userName": user_name, "date": str(nd), "reason": nr, "time": nt_str})
-            st.rerun()
+    # ここもフォームを使わずに実装することで、時間選択をスムーズにします
+    nd = st.date_input("行けない日", value=get_jst_now().date(), key="ng_date_input")
+    nt_str = time_selector_ui("ng_add")
+    nr = st.text_input("理由など(任意)", key="ng_reason_input")
+    if st.button("NG登録", use_container_width=True, type="primary", key="ng_add_btn"):
+        get_ng_ref().add({"roomKey": room_key, "userName": user_name, "date": str(nd), "reason": nr, "time": nt_str})
+        st.rerun()
     
     st.divider()
     upcoming_ng = sorted([n for n in ng_dates if n["date"] >= today_str], key=lambda x: (x["date"], x.get("time") or "00:00"))
