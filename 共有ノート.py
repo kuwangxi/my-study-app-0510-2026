@@ -30,6 +30,7 @@ st.markdown("""
         padding: 2px 5px;
         border-radius: 4px;
         font-size: 0.8rem;
+        color: #333;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -54,6 +55,19 @@ APP_ID = "couple-secure-v2"
 def get_events_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_events')
 def get_ng_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_ng_dates')
 def get_rooms_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_rooms')
+
+# 時間選択用共通UI関数
+def time_selector_ui(key_prefix):
+    t_type = st.selectbox("時間指定", ["指定なし", "午前中", "午後", "終日", "カスタム"], key=f"t_type_{key_prefix}")
+    if t_type == "カスタム":
+        col_c1, col_c2 = st.columns(2)
+        t_start = col_c1.time_input("開始", value=get_jst_now().time(), key=f"t_start_{key_prefix}")
+        t_end = col_c2.time_input("終了", value=(get_jst_now() + timedelta(hours=2)).time(), key=f"t_end_{key_prefix}")
+        return f"{t_start.strftime('%H:%M')}～{t_end.strftime('%H:%M')}"
+    elif t_type == "指定なし":
+        return None
+    else:
+        return t_type
 
 # ==========================================
 # 2. セッション管理 & 編集用ステート
@@ -122,15 +136,13 @@ with tab1:
             t = st.text_input("場所/内容")
             u = st.text_input("URL")
             m = st.text_area("メモ")
-            col_t1, col_t2 = st.columns(2)
-            has_time = col_t1.checkbox("時間を指定する")
-            wt = col_t2.time_input("時間", value=get_jst_now().time()) if has_time else None
+            wt = time_selector_ui("wish")
             
             if st.form_submit_button("追加") and t:
                 get_events_ref().add({
                     "roomKey": room_key, "title": t, "url": u, "memo": m, 
                     "userName": user_name, "status": "wishlist", "comments": [], 
-                    "time": wt.strftime("%H:%M") if wt else None,
+                    "time": wt,
                     "createdAt": get_jst_now().isoformat()
                 })
                 st.rerun()
@@ -141,7 +153,7 @@ with tab1:
                 et = st.text_input("編集: タイトル", item["title"], key=f"et_{item['id']}")
                 eu = st.text_input("編集: URL", item.get("url",""), key=f"eu_{item['id']}")
                 em = st.text_area("編集: メモ", item.get("memo",""), key=f"em_{item['id']}")
-                eti = st.text_input("編集: 時間 (HH:MM / 空白可)", item.get("time",""), key=f"eti_{item['id']}")
+                eti = st.text_input("編集: 時間 (自由入力)", item.get("time",""), key=f"eti_{item['id']}")
                 
                 c1, c2, c3 = st.columns(3)
                 if c1.button("保存", key=f"sv_{item['id']}", use_container_width=True, type="primary"):
@@ -169,8 +181,16 @@ with tab1:
                         get_events_ref().document(item["id"]).update({"comments": firestore.ArrayUnion([{"userName":user_name, "text":new_c, "createdAt":get_jst_now().isoformat()}])})
                         st.rerun()
                     st.divider()
+                    st.write("確定情報を入力してください")
                     sd = st.date_input("確定日", value=get_jst_now().date(), key=f"sd_{item['id']}")
-                    st.button("この日で確定", key=f"fix_{item['id']}", on_click=lambda i=item, d=sd: get_events_ref().document(i["id"]).update({"status":"scheduled", "date":str(d)}))
+                    st_time = time_selector_ui(f"fix_{item['id']}")
+                    if st.button("この日で確定", key=f"fix_{item['id']}"):
+                        get_events_ref().document(item['id']).update({
+                            "status": "scheduled", 
+                            "date": str(sd),
+                            "time": st_time
+                        })
+                        st.rerun()
 
 # --- タブ2: 予定 ---
 with tab2:
@@ -181,10 +201,8 @@ with tab2:
     days_map = {"1週間": 7, "2週間": 14, "1ヶ月": 30}
     days_count = days_map[duration]
     
-    # 横スクロール対応のためにコンテナ化
     with st.container():
-        # カレンダー表示 (列数が多すぎる場合はStreamlitが自動で折り返す)
-        cols = st.columns(7) # 1行7日固定で表示
+        cols = st.columns(7) 
         for i in range(days_count):
             target_date = get_jst_now().date() + timedelta(days=i)
             t_str = str(target_date)
@@ -200,7 +218,7 @@ with tab2:
                 if day_events and day_ng: content = "⚠️"
                 st.markdown(f"""<div class="calendar-card {bg_cls}"><b>{target_date.strftime('%m/%d')}</b><br>{content}</div>""", unsafe_allow_html=True)
             if (i + 1) % 7 == 0 and i + 1 < days_count:
-                st.write("") # 改行用
+                st.write("")
 
     st.divider()
     
@@ -212,9 +230,8 @@ with tab2:
         cls = "past-item" if is_past else ""
         with st.container(border=True):
             if st.session_state.edit_id == item["id"]:
-                # 編集モード
                 new_date = st.date_input("日付変更", value=datetime.strptime(item["date"], "%Y-%m-%d").date(), key=f"nd_edit_{item['id']}")
-                new_time = st.text_input("時間変更 (HH:MM)", item.get("time",""), key=f"nt_edit_time_{item['id']}")
+                new_time = st.text_input("時間変更", item.get("time",""), key=f"nt_edit_time_{item['id']}")
                 new_title = st.text_input("タイトル", item["title"], key=f"nt_edit_{item['id']}")
                 
                 c1, c2, c3 = st.columns(3)
@@ -227,7 +244,6 @@ with tab2:
                 if c3.button("キャンセル", key=f"cn_s_{item['id']}", use_container_width=True):
                     st.session_state.edit_id = None; st.rerun()
             else:
-                # 通常モード
                 c1, c2, c3 = st.columns([2, 5, 1])
                 time_str = f" {item['time']}" if item.get("time") else ""
                 c1.markdown(f"<p class='{cls}'><b>📅 {item['date']}{time_str}</b></p>", unsafe_allow_html=True)
@@ -253,15 +269,13 @@ with tab3:
     st.subheader("🚫 NG日を登録")
     with st.form("add_ng"):
         nd = st.date_input("行けない日", value=get_jst_now().date())
-        col_nt1, col_nt2 = st.columns(2)
-        has_ntime = col_nt1.checkbox("時間を指定する")
-        nt = col_nt2.time_input("時間", value=get_jst_now().time()) if has_ntime else None
+        nt_str = time_selector_ui("ng")
         nr = st.text_input("理由など(任意)")
         if st.form_submit_button("NG登録", use_container_width=True):
             get_ng_ref().add({
                 "roomKey": room_key, "userName": user_name, 
                 "date": str(nd), "reason": nr,
-                "time": nt.strftime("%H:%M") if nt else None
+                "time": nt_str
             })
             st.rerun()
     
@@ -273,9 +287,8 @@ with tab3:
         cls = "past-item" if is_past else ""
         with st.container(border=True):
             if st.session_state.edit_id == n["id"]:
-                # 編集モード
                 nd2 = st.date_input("日付変更", value=datetime.strptime(n["date"], "%Y-%m-%d").date(), key=f"nd2_{n['id']}")
-                nt2 = st.text_input("時間変更 (HH:MM)", n.get("time",""), key=f"nt2_{n['id']}")
+                nt2 = st.text_input("時間変更 (自由入力)", n.get("time",""), key=f"nt2_{n['id']}")
                 nr2 = st.text_input("理由変更", n.get("reason",""), key=f"nr2_{n['id']}")
                 
                 c1, c2, c3 = st.columns(3)
@@ -288,7 +301,6 @@ with tab3:
                 if c3.button("中止", key=f"cn_ng_{n['id']}", use_container_width=True):
                     st.session_state.edit_id = None; st.rerun()
             else:
-                # 通常モード
                 c1, c2, c3 = st.columns([3, 5, 1])
                 n_time_str = f" <span class='time-badge'>{n['time']}</span>" if n.get("time") else ""
                 c1.markdown(f"<span class='{cls}'><b>{n['date']}{n_time_str}</b></span>", unsafe_allow_html=True)
