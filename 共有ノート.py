@@ -132,13 +132,14 @@ tab1, tab2, tab3 = st.tabs(["📍 行きたい", "📅 予定", "🚫 NG日"])
 # --- タブ1: 行きたいリスト ---
 with tab1:
     with st.expander("＋ 追加する"):
-        with st.form("add_wish"):
-            t = st.text_input("場所/内容")
-            u = st.text_input("URL")
-            m = st.text_area("メモ")
-            wt = time_selector_ui("wish")
-            
-            if st.form_submit_button("追加") and t:
+        # カスタム時間を即時反映させるためformを解除
+        t = st.text_input("場所/内容", key="add_wish_t")
+        u = st.text_input("URL", key="add_wish_u")
+        m = st.text_area("メモ", key="add_wish_m")
+        wt = time_selector_ui("wish")
+        
+        if st.button("追加", key="add_wish_btn", use_container_width=True):
+            if t:
                 get_events_ref().add({
                     "roomKey": room_key, "title": t, "url": u, "memo": m, 
                     "userName": user_name, "status": "wishlist", "comments": [], 
@@ -146,6 +147,8 @@ with tab1:
                     "createdAt": get_jst_now().isoformat()
                 })
                 st.rerun()
+            else:
+                st.warning("場所/内容を入力してください")
 
     for item in [e for e in events if e.get("status") == "wishlist"]:
         with st.container(border=True):
@@ -159,10 +162,10 @@ with tab1:
                 if c1.button("保存", key=f"sv_{item['id']}", use_container_width=True, type="primary"):
                     get_events_ref().document(item["id"]).update({"title":et, "url":eu, "memo":em, "time":eti if eti else None})
                     st.session_state.edit_id = None; st.rerun()
-                if c2.button("削除", key=f"del_w_{item['id']}", use_container_width=True):
-                    get_events_ref().document(item["id"]).delete()
+                if c2.button("キャンセル", key=f"cn_{item['id']}", use_container_width=True):
                     st.session_state.edit_id = None; st.rerun()
-                if c3.button("中止", key=f"cn_{item['id']}", use_container_width=True):
+                if c3.button("削除", key=f"del_w_{item['id']}", use_container_width=True):
+                    get_events_ref().document(item["id"]).delete()
                     st.session_state.edit_id = None; st.rerun()
             else:
                 c1, c2 = st.columns([5,1])
@@ -184,7 +187,7 @@ with tab1:
                     st.write("確定情報を入力してください")
                     sd = st.date_input("確定日", value=get_jst_now().date(), key=f"sd_{item['id']}")
                     st_time = time_selector_ui(f"fix_{item['id']}")
-                    if st.button("この日で確定", key=f"fix_{item['id']}"):
+                    if st.button("この日で確定", key=f"fix_btn_{item['id']}"):
                         get_events_ref().document(item['id']).update({
                             "status": "scheduled", 
                             "date": str(sd),
@@ -223,7 +226,6 @@ with tab2:
     st.divider()
     
     sched = [e for e in events if e.get("status") == "scheduled"]
-    # 並び替えの際のNone回避ロジックを修正
     upcoming = sorted([e for e in sched if e["date"] >= today_str], key=lambda x: (x["date"], x.get("time") or "99:99"))
     past = sorted([e for e in sched if e["date"] < today_str], key=lambda x: (x["date"], x.get("time") or "99:99"), reverse=True)
 
@@ -239,10 +241,10 @@ with tab2:
                 if c1.button("保存", key=f"ups_{item['id']}", use_container_width=True, type="primary"):
                     get_events_ref().document(item["id"]).update({"date":str(new_date), "title":new_title, "time":new_time if new_time else None})
                     st.session_state.edit_id = None; st.rerun()
-                if c2.button("削除", key=f"del_s_{item['id']}", use_container_width=True):
-                    get_events_ref().document(item["id"]).delete()
+                if c2.button("キャンセル", key=f"cn_s_{item['id']}", use_container_width=True):
                     st.session_state.edit_id = None; st.rerun()
-                if c3.button("キャンセル", key=f"cn_s_{item['id']}", use_container_width=True):
+                if c3.button("削除", key=f"del_s_{item['id']}", use_container_width=True):
+                    get_events_ref().document(item["id"]).delete()
                     st.session_state.edit_id = None; st.rerun()
             else:
                 c1, c2, c3 = st.columns([2, 5, 1])
@@ -268,20 +270,19 @@ with tab2:
 # --- タブ3: NG日 ---
 with tab3:
     st.subheader("🚫 NG日を登録")
-    with st.form("add_ng"):
-        nd = st.date_input("行けない日", value=get_jst_now().date())
-        nt_str = time_selector_ui("ng")
-        nr = st.text_input("理由など(任意)")
-        if st.form_submit_button("NG登録", use_container_width=True):
-            get_ng_ref().add({
-                "roomKey": room_key, "userName": user_name, 
-                "date": str(nd), "reason": nr,
-                "time": nt_str
-            })
-            st.rerun()
+    # リアルタイム反映のためformを解除
+    nd = st.date_input("行けない日", value=get_jst_now().date(), key="add_ng_date")
+    nt_str = time_selector_ui("ng")
+    nr = st.text_input("理由など(任意)", key="add_ng_reason")
+    if st.button("NG登録", key="add_ng_btn", use_container_width=True):
+        get_ng_ref().add({
+            "roomKey": room_key, "userName": user_name, 
+            "date": str(nd), "reason": nr,
+            "time": nt_str
+        })
+        st.rerun()
     
     st.divider()
-    # 並び替えの際のNone回避ロジックを修正
     upcoming_ng = sorted([n for n in ng_dates if n["date"] >= today_str], key=lambda x: (x["date"], x.get("time") or "00:00"))
     past_ng = sorted([n for n in ng_dates if n["date"] < today_str], key=lambda x: (x["date"], x.get("time") or "00:00"), reverse=True)
 
@@ -297,10 +298,10 @@ with tab3:
                 if c1.button("保存", key=f"sv_ng_{n['id']}", use_container_width=True, type="primary"):
                     get_ng_ref().document(n["id"]).update({"date":str(nd2), "reason":nr2, "time":nt2 if nt2 else None})
                     st.session_state.edit_id = None; st.rerun()
-                if c2.button("削除", key=f"del_ng_{n['id']}", use_container_width=True):
-                    get_ng_ref().document(n["id"]).delete()
+                if c2.button("キャンセル", key=f"cn_ng_{n['id']}", use_container_width=True):
                     st.session_state.edit_id = None; st.rerun()
-                if c3.button("中止", key=f"cn_ng_{n['id']}", use_container_width=True):
+                if c3.button("削除", key=f"del_ng_{n['id']}", use_container_width=True):
+                    get_ng_ref().document(n["id"]).delete()
                     st.session_state.edit_id = None; st.rerun()
             else:
                 c1, c2, c3 = st.columns([3, 5, 1])
