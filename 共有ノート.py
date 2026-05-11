@@ -153,11 +153,11 @@ with tab1:
                 et = st.text_input("編集: タイトル", item["title"], key=f"et_{item['id']}")
                 eu = st.text_input("編集: URL", item.get("url",""), key=f"eu_{item['id']}")
                 em = st.text_area("編集: メモ", item.get("memo",""), key=f"em_{item['id']}")
-                eti = st.text_input("編集: 時間 (自由入力)", item.get("time",""), key=f"eti_{item['id']}")
+                eti = st.text_input("編集: 時間 (自由入力)", item.get("time","") if item.get("time") else "", key=f"eti_{item['id']}")
                 
                 c1, c2, c3 = st.columns(3)
                 if c1.button("保存", key=f"sv_{item['id']}", use_container_width=True, type="primary"):
-                    get_events_ref().document(item["id"]).update({"title":et, "url":eu, "memo":em, "time":eti})
+                    get_events_ref().document(item["id"]).update({"title":et, "url":eu, "memo":em, "time":eti if eti else None})
                     st.session_state.edit_id = None; st.rerun()
                 if c2.button("削除", key=f"del_w_{item['id']}", use_container_width=True):
                     get_events_ref().document(item["id"]).delete()
@@ -223,20 +223,21 @@ with tab2:
     st.divider()
     
     sched = [e for e in events if e.get("status") == "scheduled"]
-    upcoming = sorted([e for e in sched if e["date"] >= today_str], key=lambda x: (x["date"], x.get("time", "99:99")))
-    past = sorted([e for e in sched if e["date"] < today_str], key=lambda x: (x["date"], x.get("time", "99:99")), reverse=True)
+    # 並び替えの際のNone回避ロジックを修正
+    upcoming = sorted([e for e in sched if e["date"] >= today_str], key=lambda x: (x["date"], x.get("time") or "99:99"))
+    past = sorted([e for e in sched if e["date"] < today_str], key=lambda x: (x["date"], x.get("time") or "99:99"), reverse=True)
 
     def show_event_item(item, is_past=False):
         cls = "past-item" if is_past else ""
         with st.container(border=True):
             if st.session_state.edit_id == item["id"]:
                 new_date = st.date_input("日付変更", value=datetime.strptime(item["date"], "%Y-%m-%d").date(), key=f"nd_edit_{item['id']}")
-                new_time = st.text_input("時間変更", item.get("time",""), key=f"nt_edit_time_{item['id']}")
+                new_time = st.text_input("時間変更", item.get("time","") if item.get("time") else "", key=f"nt_edit_time_{item['id']}")
                 new_title = st.text_input("タイトル", item["title"], key=f"nt_edit_{item['id']}")
                 
                 c1, c2, c3 = st.columns(3)
                 if c1.button("保存", key=f"ups_{item['id']}", use_container_width=True, type="primary"):
-                    get_events_ref().document(item["id"]).update({"date":str(new_date), "title":new_title, "time":new_time})
+                    get_events_ref().document(item["id"]).update({"date":str(new_date), "title":new_title, "time":new_time if new_time else None})
                     st.session_state.edit_id = None; st.rerun()
                 if c2.button("削除", key=f"del_s_{item['id']}", use_container_width=True):
                     get_events_ref().document(item["id"]).delete()
@@ -280,20 +281,21 @@ with tab3:
             st.rerun()
     
     st.divider()
-    upcoming_ng = sorted([n for n in ng_dates if n["date"] >= today_str], key=lambda x: (x["date"], x.get("time", "00:00")))
-    past_ng = sorted([n for n in ng_dates if n["date"] < today_str], key=lambda x: (x["date"], x.get("time", "00:00")), reverse=True)
+    # 並び替えの際のNone回避ロジックを修正
+    upcoming_ng = sorted([n for n in ng_dates if n["date"] >= today_str], key=lambda x: (x["date"], x.get("time") or "00:00"))
+    past_ng = sorted([n for n in ng_dates if n["date"] < today_str], key=lambda x: (x["date"], x.get("time") or "00:00"), reverse=True)
 
     def show_ng_item(n, is_past=False):
         cls = "past-item" if is_past else ""
         with st.container(border=True):
             if st.session_state.edit_id == n["id"]:
                 nd2 = st.date_input("日付変更", value=datetime.strptime(n["date"], "%Y-%m-%d").date(), key=f"nd2_{n['id']}")
-                nt2 = st.text_input("時間変更 (自由入力)", n.get("time",""), key=f"nt2_{n['id']}")
-                nr2 = st.text_input("理由変更", n.get("reason",""), key=f"nr2_{n['id']}")
+                nt2 = st.text_input("時間変更 (自由入力)", n.get("time","") if n.get("time") else "", key=f"nt2_{n['id']}")
+                nr2 = st.text_input("理由変更", n.get("reason","") if n.get("reason") else "", key=f"nr2_{n['id']}")
                 
                 c1, c2, c3 = st.columns(3)
                 if c1.button("保存", key=f"sv_ng_{n['id']}", use_container_width=True, type="primary"):
-                    get_ng_ref().document(n["id"]).update({"date":str(nd2), "reason":nr2, "time":nt2})
+                    get_ng_ref().document(n["id"]).update({"date":str(nd2), "reason":nr2, "time":nt2 if nt2 else None})
                     st.session_state.edit_id = None; st.rerun()
                 if c2.button("削除", key=f"del_ng_{n['id']}", use_container_width=True):
                     get_ng_ref().document(n["id"]).delete()
