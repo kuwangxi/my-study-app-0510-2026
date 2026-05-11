@@ -177,15 +177,21 @@ with tab1:
                 
                 with st.expander("💬 相談・確定"):
                     for c in item.get("comments", []): st.write(f"**{c['userName']}**: {c['text']}")
-                    cc1, cc2 = st.columns([3,1])
-                    msg_key = f"nc_{item['id']}"
-                    new_c = cc1.text_input("メッセージ", key=msg_key)
-                    if cc2.button("送信", key=f"nb_{item['id']}") and new_c:
-                        get_events_ref().document(item["id"]).update({"comments": firestore.ArrayUnion([{"userName":user_name, "text":new_c, "createdAt":get_jst_now().isoformat()}])})
-                        # 入力値をクリアするためにセッションからキーを削除してリラン
-                        if msg_key in st.session_state:
-                            del st.session_state[msg_key]
-                        st.rerun()
+                    
+                    # メッセージ送信フォーム (clear_on_submitでテキストボックスを自動リセット)
+                    with st.form(key=f"comment_form_{item['id']}", clear_on_submit=True):
+                        cc1, cc2 = st.columns([3,1])
+                        new_c = cc1.text_input("メッセージ", placeholder="入力してください...")
+                        if cc2.form_submit_button("送信", use_container_width=True) and new_c:
+                            get_events_ref().document(item["id"]).update({
+                                "comments": firestore.ArrayUnion([{
+                                    "userName": user_name, 
+                                    "text": new_c, 
+                                    "createdAt": get_jst_now().isoformat()
+                                }])
+                            })
+                            st.rerun()
+                    
                     st.divider()
                     st.write("確定情報を入力してください")
                     sd = st.date_input("確定日", value=get_jst_now().date(), key=f"sd_{item['id']}")
