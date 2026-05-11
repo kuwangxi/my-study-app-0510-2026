@@ -9,15 +9,14 @@ from datetime import datetime, timedelta, timezone
 # ==========================================
 st.set_page_config(page_title="ふたりの共有ノート", page_icon="🤝", layout="centered")
 
-# セッション状態の初期化（設定用）
+# セッション状態の初期化
 if "font_size" not in st.session_state: st.session_state.font_size = 14
 if "show_summary" not in st.session_state: st.session_state.show_summary = True
 if "hide_empty_days" not in st.session_state: st.session_state.hide_empty_days = False
 
-# CSSの定義（動的なフォントサイズとダークモード対応）
+# CSSの定義
 st.markdown(f"""
 <style>
-    /* 全体のフォントサイズ調整 */
     html, body, [class*="st-"] {{
         font-size: {st.session_state.font_size}px !important;
     }}
@@ -30,7 +29,6 @@ st.markdown(f"""
         border: 1px solid rgba(128, 128, 128, 0.3);
         margin-bottom: 5px;
     }}
-    /* 日付の視認性向上（太字・カラー） */
     .calendar-date {{
         font-weight: bold;
         color: #f43f5e; 
@@ -74,7 +72,7 @@ def get_events_ref(): return db.collection('artifacts').document(APP_ID).collect
 def get_ng_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_ng_dates')
 def get_rooms_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_rooms')
 
-# 時間選択用共通UI関数
+# 時間選択用共通UI関数（form外で使うため即時反映されます）
 def time_selector_ui(key_prefix):
     t_type = st.selectbox("時間指定", ["指定なし", "午前中", "午後", "終日", "カスタム"], key=f"t_type_{key_prefix}")
     if t_type == "カスタム":
@@ -88,7 +86,7 @@ def time_selector_ui(key_prefix):
         return t_type
 
 # ==========================================
-# 2. セッション管理 & 編集用ステート
+# 2. セッション管理
 # ==========================================
 if "edit_id" not in st.session_state: st.session_state.edit_id = None
 if "is_logged" not in st.session_state:
@@ -114,11 +112,16 @@ def logout():
     st.rerun()
 
 # ==========================================
-# 3. サイドバー（設定・ログアウト）
+# 3. サイドバー
 # ==========================================
 if st.session_state.is_logged:
     st.sidebar.title("⚙️ アプリ設定")
-    st.session_state.font_size = st.sidebar.slider("テキストの大きさ", 10, 24, st.session_state.font_size)
+    
+    # テキストサイズ変更（確定ボタン式）
+    new_size = st.sidebar.slider("テキストの大きさ", 10, 24, value=st.session_state.font_size)
+    if st.sidebar.button("サイズを確定する", key="btn_confirm_font_main"):
+        st.session_state.font_size = new_size
+        st.rerun()
     
     st.sidebar.divider()
     st.session_state.show_summary = st.sidebar.checkbox("カレンダーサマリーを表示", value=st.session_state.show_summary)
@@ -151,7 +154,10 @@ if not st.session_state.is_logged or not st.session_state.user_name:
     
     st.divider()
     st.caption("テキストが大きすぎて操作しづらい場合はこちら")
-    st.session_state.font_size = st.slider("ログイン画面のテキストサイズ", 10, 24, st.session_state.font_size, key="login_font_slider")
+    login_new_size = st.slider("ログイン画面のテキストサイズ", 10, 24, st.session_state.font_size)
+    if st.button("サイズを確定する", key="btn_confirm_font_login"):
+        st.session_state.font_size = login_new_size
+        st.rerun()
     st.stop()
 
 # ==========================================
@@ -159,7 +165,6 @@ if not st.session_state.is_logged or not st.session_state.user_name:
 # ==========================================
 room_key, user_name = st.session_state.room_key, st.session_state.user_name
 
-# データ一括取得
 events = [{"id": d.id, **d.to_dict()} for d in get_events_ref().where("roomKey", "==", room_key).stream()]
 ng_dates = [{"id": d.id, **d.to_dict()} for d in get_ng_ref().where("roomKey", "==", room_key).stream()]
 today_str = str(get_jst_now().date())
@@ -169,22 +174,22 @@ tab1, tab2, tab3 = st.tabs(["📍 行きたい", "📅 予定", "🚫 NG日"])
 # --- タブ1: 行きたいリスト ---
 with tab1:
     with st.expander("＋ 追加する"):
-        with st.form(key="add_wish_form", clear_on_submit=True):
-            t = st.text_input("場所/内容")
-            u = st.text_input("URL")
-            m = st.text_area("メモ")
-            wt = time_selector_ui("wish")
-            if st.form_submit_button("追加", use_container_width=True):
-                if t:
-                    get_events_ref().add({
-                        "roomKey": room_key, "title": t, "url": u, "memo": m, 
-                        "userName": user_name, "status": "wishlist", "comments": [], 
-                        "time": wt,
-                        "createdAt": get_jst_now().isoformat()
-                    })
-                    st.rerun()
-                else:
-                    st.warning("場所/内容を入力してください")
+        # st.formを削除して「カスタム」が即座に動くように修正
+        t = st.text_input("場所/内容", key="add_t")
+        u = st.text_input("URL", key="add_u")
+        m = st.text_area("メモ", key="add_m")
+        wt = time_selector_ui("wish")
+        if st.button("追加", use_container_width=True, type="primary", key="add_wish_btn"):
+            if t:
+                get_events_ref().add({
+                    "roomKey": room_key, "title": t, "url": u, "memo": m, 
+                    "userName": user_name, "status": "wishlist", "comments": [], 
+                    "time": wt,
+                    "createdAt": get_jst_now().isoformat()
+                })
+                st.rerun()
+            else:
+                st.warning("場所/内容を入力してください")
 
     for item in [e for e in events if e.get("status") == "wishlist"]:
         with st.container(border=True):
@@ -241,7 +246,6 @@ with tab1:
 
 # --- タブ2: 予定 ---
 with tab2:
-    # カレンダーサマリー
     if st.session_state.show_summary:
         col_dur1, col_dur2 = st.columns([2,1])
         with col_dur1: st.markdown("#### 🗓️ カレンダーサマリー")
@@ -256,8 +260,6 @@ with tab2:
                 t_str = str(target_date)
                 day_events = [e for e in events if e.get("date") == t_str]
                 day_ng = [n for n in ng_dates if n.get("date") == t_str]
-                
-                # 「予定がある日のみ」設定がONの場合、何もない日はスキップ
                 if st.session_state.hide_empty_days and not day_events and not day_ng:
                     continue
                 display_days.append((target_date, t_str, day_events, day_ng, i == 0))
@@ -273,8 +275,6 @@ with tab2:
                         if day_events: content = "📍"
                         if day_ng: content = "🚫"
                         if day_events and day_ng: content = "⚠️"
-                        
-                        # 日付 + 曜日の表示
                         date_label = f"{target_date.strftime('%m/%d')}({get_weekday_jp(target_date)})"
                         st.markdown(f"""
                             <div class="calendar-card {bg_cls}">
@@ -316,7 +316,6 @@ with tab2:
                 if col_b1.button("💬 履歴", key=f"hist_{item['id']}", use_container_width=True):
                     with st.container():
                         st.info("\n".join([f"{c['userName']}: {c['text']}" for c in item.get("comments", [])]) or "やり取りはありません")
-                        if st.button("履歴を閉じる", key=f"close_hist_{item['id']}"): st.rerun()
                 if col_b2.button("「行きたい」に戻す", key=f"rev_{item['id']}", use_container_width=True):
                     get_events_ref().document(item["id"]).update({"status":"wishlist", "date":None}); st.rerun()
 
@@ -330,16 +329,16 @@ with tab2:
 # --- タブ3: NG日 ---
 with tab3:
     st.subheader("🚫 NG日を登録")
-    with st.form(key="add_ng_form", clear_on_submit=True):
-        nd = st.date_input("行けない日", value=get_jst_now().date())
-        nt_str = time_selector_ui("ng_form")
-        nr = st.text_input("理由など(任意)")
-        if st.form_submit_button("NG登録", use_container_width=True):
-            get_ng_ref().add({
-                "roomKey": room_key, "userName": user_name, 
-                "date": str(nd), "reason": nr, "time": nt_str
-            })
-            st.rerun()
+    # st.formを削除して即時反映に対応
+    nd = st.date_input("行けない日", value=get_jst_now().date(), key="ng_d")
+    nt_str = time_selector_ui("ng_form")
+    nr = st.text_input("理由など(任意)", key="ng_r")
+    if st.button("NG登録", use_container_width=True, type="primary", key="ng_add_btn"):
+        get_ng_ref().add({
+            "roomKey": room_key, "userName": user_name, 
+            "date": str(nd), "reason": nr, "time": nt_str
+        })
+        st.rerun()
     
     st.divider()
     upcoming_ng = sorted([n for n in ng_dates if n["date"] >= today_str], key=lambda x: (x["date"], x.get("time") or "00:00"))
