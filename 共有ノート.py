@@ -182,9 +182,9 @@ with tab1:
                     new_c = cc1.text_input("メッセージ", key=msg_key)
                     if cc2.button("送信", key=f"nb_{item['id']}") and new_c:
                         get_events_ref().document(item["id"]).update({"comments": firestore.ArrayUnion([{"userName":user_name, "text":new_c, "createdAt":get_jst_now().isoformat()}])})
-                        # 入力値をクリアするためにセッションから削除してリラン
+                        # 入力値をクリアするためにセッションからキーを削除してリラン
                         if msg_key in st.session_state:
-                            st.session_state[msg_key] = ""
+                            del st.session_state[msg_key]
                         st.rerun()
                     st.divider()
                     st.write("確定情報を入力してください")
