@@ -132,22 +132,23 @@ tab1, tab2, tab3 = st.tabs(["📍 行きたい", "📅 予定", "🚫 NG日"])
 # --- タブ1: 行きたいリスト ---
 with tab1:
     with st.expander("＋ 追加する"):
-        t = st.text_input("場所/内容", key="add_wish_t")
-        u = st.text_input("URL", key="add_wish_u")
-        m = st.text_area("メモ", key="add_wish_m")
-        wt = time_selector_ui("wish")
-        
-        if st.button("追加", key="add_wish_btn", use_container_width=True):
-            if t:
-                get_events_ref().add({
-                    "roomKey": room_key, "title": t, "url": u, "memo": m, 
-                    "userName": user_name, "status": "wishlist", "comments": [], 
-                    "time": wt,
-                    "createdAt": get_jst_now().isoformat()
-                })
-                st.rerun()
-            else:
-                st.warning("場所/内容を入力してください")
+        # フォーム化して送信時にリセット
+        with st.form(key="add_wish_form", clear_on_submit=True):
+            t = st.text_input("場所/内容")
+            u = st.text_input("URL")
+            m = st.text_area("メモ")
+            wt = time_selector_ui("wish")
+            if st.form_submit_button("追加", use_container_width=True):
+                if t:
+                    get_events_ref().add({
+                        "roomKey": room_key, "title": t, "url": u, "memo": m, 
+                        "userName": user_name, "status": "wishlist", "comments": [], 
+                        "time": wt,
+                        "createdAt": get_jst_now().isoformat()
+                    })
+                    st.rerun()
+                else:
+                    st.warning("場所/内容を入力してください")
 
     for item in [e for e in events if e.get("status") == "wishlist"]:
         with st.container(border=True):
@@ -178,10 +179,10 @@ with tab1:
                 with st.expander("💬 相談・確定"):
                     for c in item.get("comments", []): st.write(f"**{c['userName']}**: {c['text']}")
                     
-                    # メッセージ送信フォーム (clear_on_submitでテキストボックスを自動リセット)
+                    # コメント送信フォーム
                     with st.form(key=f"comment_form_{item['id']}", clear_on_submit=True):
                         cc1, cc2 = st.columns([3,1])
-                        new_c = cc1.text_input("メッセージ", placeholder="入力してください...")
+                        new_c = cc1.text_input("メッセージ", placeholder="メッセージを入力...")
                         if cc2.form_submit_button("送信", use_container_width=True) and new_c:
                             get_events_ref().document(item["id"]).update({
                                 "comments": firestore.ArrayUnion([{
@@ -209,9 +210,7 @@ with tab2:
     col_dur1, col_dur2 = st.columns([2,1])
     with col_dur1: st.markdown("#### 🗓️ カレンダーサマリー")
     duration = col_dur2.selectbox("表示期間", ["1週間", "2週間", "1ヶ月"], index=0)
-    
-    days_map = {"1週間": 7, "2週間": 14, "1ヶ月": 30}
-    days_count = days_map[duration]
+    days_count = {"1週間": 7, "2週間": 14, "1ヶ月": 30}[duration]
     
     with st.container():
         cols = st.columns(7) 
@@ -233,7 +232,6 @@ with tab2:
                 st.write("")
 
     st.divider()
-    
     sched = [e for e in events if e.get("status") == "scheduled"]
     upcoming = sorted([e for e in sched if e["date"] >= today_str], key=lambda x: (x["date"], x.get("time") or "99:99"))
     past = sorted([e for e in sched if e["date"] < today_str], key=lambda x: (x["date"], x.get("time") or "99:99"), reverse=True)
@@ -245,7 +243,6 @@ with tab2:
                 new_date = st.date_input("日付変更", value=datetime.strptime(item["date"], "%Y-%m-%d").date(), key=f"nd_edit_{item['id']}")
                 new_time = st.text_input("時間変更", item.get("time","") if item.get("time") else "", key=f"nt_edit_time_{item['id']}")
                 new_title = st.text_input("タイトル", item["title"], key=f"nt_edit_{item['id']}")
-                
                 c1, c2, c3 = st.columns(3)
                 if c1.button("保存", key=f"ups_{item['id']}", use_container_width=True, type="primary"):
                     get_events_ref().document(item["id"]).update({"date":str(new_date), "title":new_title, "time":new_time if new_time else None})
@@ -261,21 +258,17 @@ with tab2:
                 c1.markdown(f"<p class='{cls}'><b>📅 {item['date']}{time_str}</b></p>", unsafe_allow_html=True)
                 c2.markdown(f"<p class='{cls}'><b>{item['title']}</b></p>", unsafe_allow_html=True)
                 if c3.button("📝", key=f"ed_s_{item['id']}"): st.session_state.edit_id = item["id"]; st.rerun()
-                
                 col_b1, col_b2 = st.columns(2)
                 if col_b1.button("💬 履歴", key=f"hist_{item['id']}", use_container_width=True):
                     with st.container():
                         st.info("\n".join([f"{c['userName']}: {c['text']}" for c in item.get("comments", [])]) or "やり取りはありません")
-                        if st.button("履歴を閉じる", key=f"close_hist_{item['id']}"):
-                            st.rerun()
-                            
+                        if st.button("履歴を閉じる", key=f"close_hist_{item['id']}"): st.rerun()
                 if col_b2.button("「行きたい」に戻す", key=f"rev_{item['id']}", use_container_width=True):
                     get_events_ref().document(item["id"]).update({"status":"wishlist", "date":None}); st.rerun()
 
     st.subheader("🚀 これからの予定")
     if not upcoming: st.write("予定はありません")
     for item in upcoming: show_event_item(item)
-
     if past:
         with st.expander("⌛ 終わった予定を表示"):
             for item in past: show_event_item(item, is_past=True)
@@ -283,16 +276,16 @@ with tab2:
 # --- タブ3: NG日 ---
 with tab3:
     st.subheader("🚫 NG日を登録")
-    nd = st.date_input("行けない日", value=get_jst_now().date(), key="add_ng_date")
-    nt_str = time_selector_ui("ng")
-    nr = st.text_input("理由など(任意)", key="add_ng_reason")
-    if st.button("NG登録", key="add_ng_btn", use_container_width=True):
-        get_ng_ref().add({
-            "roomKey": room_key, "userName": user_name, 
-            "date": str(nd), "reason": nr,
-            "time": nt_str
-        })
-        st.rerun()
+    with st.form(key="add_ng_form", clear_on_submit=True):
+        nd = st.date_input("行けない日", value=get_jst_now().date())
+        nt_str = time_selector_ui("ng_form")
+        nr = st.text_input("理由など(任意)")
+        if st.form_submit_button("NG登録", use_container_width=True):
+            get_ng_ref().add({
+                "roomKey": room_key, "userName": user_name, 
+                "date": str(nd), "reason": nr, "time": nt_str
+            })
+            st.rerun()
     
     st.divider()
     upcoming_ng = sorted([n for n in ng_dates if n["date"] >= today_str], key=lambda x: (x["date"], x.get("time") or "00:00"))
@@ -305,7 +298,6 @@ with tab3:
                 nd2 = st.date_input("日付変更", value=datetime.strptime(n["date"], "%Y-%m-%d").date(), key=f"nd2_{n['id']}")
                 nt2 = st.text_input("時間変更 (自由入力)", n.get("time","") if n.get("time") else "", key=f"nt2_{n['id']}")
                 nr2 = st.text_input("理由変更", n.get("reason","") if n.get("reason") else "", key=f"nr2_{n['id']}")
-                
                 c1, c2, c3 = st.columns(3)
                 if c1.button("保存", key=f"sv_ng_{n['id']}", use_container_width=True, type="primary"):
                     get_ng_ref().document(n["id"]).update({"date":str(nd2), "reason":nr2, "time":nt2 if nt2 else None})
@@ -325,7 +317,6 @@ with tab3:
     st.subheader("📍 今後のNG日")
     if not upcoming_ng: st.write("NG日の登録はありません")
     for n in upcoming_ng: show_ng_item(n)
-    
     if past_ng:
         with st.expander("⌛ 過去のNG日"):
             for n in past_ng: show_ng_item(n, is_past=True)
