@@ -132,12 +132,26 @@ st.markdown(f"""
     .cal-today {{ border: 2px solid {st.session_state.user_color} !important; background-color: #262626 !important; }}
     .cal-dot {{ font-size: 0.7em; margin-bottom: 1px; border-radius: 2px; padding: 1px 2px; line-height: 1.1; }}
     
-    /* 案4: 生理関連は背景なし・文字(アイコン)のみでシンプルに */
-    .period-dot {{ background-color: transparent; color: #f43f5e; font-weight: 600; }}
-    .ovulation-dot {{ background-color: transparent; color: #a855f7; font-weight: 600; }}
-    .pms-dot {{ background-color: transparent; color: #eab308; font-weight: 600; }}
-    .fertility-dot {{ background-color: transparent; color: #22c55e; font-weight: 600; }}
+    /* 生理関連: 視認性の良いベタ塗りバッジ */
+    .period-dot {{ background-color: rgba(244, 63, 94, 0.25); color: #fb7185; border-left: 2px solid #f43f5e; }}
+    .ovulation-dot {{ background-color: rgba(168, 85, 247, 0.25); color: #c084fc; border-left: 2px solid #a855f7; }}
+    .pms-dot {{ background-color: rgba(234, 179, 8, 0.25); color: #fde047; border-left: 2px solid #eab308; }}
+    .fertility-dot {{ background-color: rgba(34, 197, 94, 0.25); color: #4ade80; border-left: 2px solid #22c55e; }}
     
+    /* 案2&3: NG日はグレーアウト & 斜線ストライプ柄 */
+    .ng-dot {{ 
+        background: repeating-linear-gradient(
+            45deg,
+            rgba(80, 80, 80, 0.4),
+            rgba(80, 80, 80, 0.4) 5px,
+            rgba(100, 100, 100, 0.4) 5px,
+            rgba(100, 100, 100, 0.4) 10px
+        );
+        color: #cccccc; 
+        border: 1px solid #555555;
+        font-weight: normal;
+    }}
+
     .last-comment {{ font-size: 0.85em; border-left: 4px solid; padding-left: 10px; margin-top: 10px; margin-bottom: 10px; line-height: 1.4; }}
     .time-badge {{ background-color: rgba(128, 128, 128, 0.2); padding: 2px 6px; border-radius: 4px; font-size: 0.8em; }}
 </style>
@@ -377,9 +391,9 @@ with tab3:
                 inner = f'<div class="cal-date">{day}</div>'
                 for p_type, p_label in day_periods: inner += f'<div class="cal-dot {p_type}-dot">{p_label}</div>'
                 for e in day_evs: inner += f'<div class="cal-dot" style="background-color:rgba(59,130,246,0.2); color:#60a5fa;">📍 {e["title"]}</div>'
+                # NG日の表示（ng-dot クラスを適用）
                 for n in day_ngs:
-                    u_clr = st.session_state.room_user_colors.get(n.get("userName"), "#f43f5e")
-                    inner += f'<div class="cal-dot" style="background-color:{u_clr}33; color:{u_clr}; border-left: 2px solid {u_clr};">🚫 {n.get("userName")}</div>'
+                    inner += f'<div class="cal-dot ng-dot">🚫 {n.get("userName")}</div>'
                 
                 cal_html += f'<div class="cal-box {"cal-today" if is_today else ""}">{inner}</div>'
     st.markdown(cal_html + '</div>', unsafe_allow_html=True)
