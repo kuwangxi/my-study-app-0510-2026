@@ -1,14 +1,158 @@
+import streamlit as st
+import firebase_admin
+from firebase_admin import credentials, firestore
+import random
+from datetime import datetime, timedelta, timezone
+import calendar
+
 # =====================================================
-# 追加CSS
-# 既存CSSの一番下へ追加
+# 基本設定
 # =====================================================
 
-.calendar-wrap {
-    width:100%;
-    overflow-x:auto;
+st.set_page_config(
+    page_title="ふたりの共有ノート",
+    page_icon="🤝",
+    layout="wide"
+)
+
+# =====================================================
+# セッション状態
+# =====================================================
+
+defaults = {
+    "font_size": 14,
+    "edit_id": None,
+    "user_color": "#ff4b6e",
+    "input_title": "",
+    "input_url": "",
+    "input_memo": "",
+    "ng_reason": "",
+    "clear_wish_inputs": False,
+    "clear_ng_inputs": False,
 }
 
-.calendar-grid {
+for k, v in defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
+
+# =====================================================
+# 入力リセット
+# =====================================================
+
+if st.session_state.clear_wish_inputs:
+    st.session_state.input_title = ""
+    st.session_state.input_url = ""
+    st.session_state.input_memo = ""
+    st.session_state.clear_wish_inputs = False
+
+if st.session_state.clear_ng_inputs:
+    st.session_state.ng_reason = ""
+    st.session_state.clear_ng_inputs = False
+
+# =====================================================
+# 時刻
+# =====================================================
+
+def get_jst_now():
+    return datetime.now(timezone(timedelta(hours=9)))
+
+# =====================================================
+# Firebase
+# =====================================================
+
+if not firebase_admin._apps:
+
+    cred_dict = dict(st.secrets["firebase"])
+
+    if "private_key" in cred_dict:
+        cred_dict["private_key"] = cred_dict["private_key"].replace("\\n", "\n")
+
+    cred = credentials.Certificate(cred_dict)
+
+    firebase_admin.initialize_app(cred)
+
+db = firestore.client()
+
+APP_ID = "couple-secure-v2"
+
+def get_events_ref():
+    return (
+        db.collection("artifacts")
+        .document(APP_ID)
+        .collection("public")
+        .document("data")
+        .collection("secure_events")
+    )
+
+def get_ng_ref():
+    return (
+        db.collection("artifacts")
+        .document(APP_ID)
+        .collection("public")
+        .document("data")
+        .collection("secure_ng_dates")
+    )
+
+def get_rooms_ref():
+    return (
+        db.collection("artifacts")
+        .document(APP_ID)
+        .collection("public")
+        .document("data")
+        .collection("secure_rooms")
+    )
+
+# =====================================================
+# ログイン保持
+# =====================================================
+
+if "is_logged" not in st.session_state:
+
+    q_room = st.query_params.get("room")
+    q_user = st.query_params.get("user")
+
+    if q_room and q_user:
+        st.session_state.room_key = q_room
+        st.session_state.user_name = q_user
+        st.session_state.is_logged = True
+    else:
+        st.session_state.is_logged = False
+
+def login_action(room, user):
+
+    st.session_state.room_key = room
+    st.session_state.user_name = user
+    st.session_state.is_logged = True
+
+    st.query_params["room"] = room
+    st.query_params["user"] = user
+
+def logout():
+
+    st.session_state.is_logged = False
+
+    st.query_params.clear()
+
+    st.rerun()
+
+# =====================================================
+# CSS
+# =====================================================
+
+st.markdown(
+    f"""
+<style>
+
+html, body, [class*="st-"] {{
+    font-size:{st.session_state.font_size}px !important;
+}}
+
+.calendar-wrap {{
+    width:100%;
+    overflow-x:auto;
+}}
+
+.calendar-grid {{
     display:grid;
     grid-template-columns:repeat(7, minmax(110px,1fr));
     gap:1px;
@@ -16,46 +160,47 @@
     border:1px solid #222;
     border-radius:12px;
     overflow:hidden;
-}
+}}
 
-.calendar-head {
+.calendar-head {{
     background:#111;
     text-align:center;
     padding:10px 4px;
     font-weight:bold;
     color:#aaa;
-}
+}}
 
-.calendar-cell {
+.calendar-cell {{
     background:#000;
     min-height:140px;
     padding:6px;
     position:relative;
-}
+}}
 
-.today-cell {
+.today-cell {{
     background:#171717;
-}
+    border:2px solid #ff4b6e;
+}}
 
-.day-number {
+.day-number {{
     font-size:18px;
     margin-bottom:6px;
     font-weight:bold;
-}
+}}
 
-.sat {
+.sat {{
     color:#4d8dff;
-}
+}}
 
-.sun {
+.sun {{
     color:#ff5b5b;
-}
+}}
 
-.other-month {
+.other-month {{
     opacity:0.35;
-}
+}}
 
-.calendar-event {
+.calendar-event {{
     font-size:11px;
     border-radius:6px;
     padding:3px 6px;
@@ -64,40 +209,176 @@
     white-space:nowrap;
     text-overflow:ellipsis;
     color:white;
-}
+}}
 
-.event-normal {
+.event-normal {{
     background:#1f8f5f;
-}
+}}
 
-.event-ng {
+.event-ng {{
     background:#b03b3b;
-}
+}}
 
-@media (max-width:768px){
+.last-message {{
+    background:#1f1f1f;
+    border-radius:10px;
+    padding:8px;
+    margin-top:8px;
+}}
 
-    .calendar-grid{
+.comment-box {{
+    padding:8px;
+    border-radius:10px;
+    margin-bottom:8px;
+    background:#1a1a1a;
+}}
+
+@media (max-width:768px) {{
+
+    .calendar-grid {{
         grid-template-columns:repeat(7, minmax(52px,1fr));
-    }
+    }}
 
-    .calendar-cell{
+    .calendar-cell {{
         min-height:90px;
         padding:4px;
-    }
+    }}
 
-    .day-number{
+    .day-number {{
         font-size:13px;
-    }
+    }}
 
-    .calendar-event{
+    .calendar-event {{
         font-size:8px;
         padding:2px 4px;
-    }
-}
+    }}
+}}
+
+</style>
+""",
+    unsafe_allow_html=True
+)
 
 # =====================================================
-# 行きたいタブ 修正版
-# with tab1: の中を全部これに置換
+# サイドバー
+# =====================================================
+
+if st.session_state.get("is_logged"):
+
+    st.sidebar.title("⚙️ 設定")
+
+    new_size = st.sidebar.slider(
+        "文字サイズ",
+        10,
+        30,
+        st.session_state.font_size
+    )
+
+    new_color = st.sidebar.color_picker(
+        "自分の色",
+        st.session_state.user_color
+    )
+
+    if new_size != st.session_state.font_size:
+        st.session_state.font_size = new_size
+        st.rerun()
+
+    if new_color != st.session_state.user_color:
+        st.session_state.user_color = new_color
+        st.rerun()
+
+    st.sidebar.divider()
+
+    st.sidebar.write(f"👤 {st.session_state.user_name}")
+    st.sidebar.write(f"🔑 {st.session_state.room_key}")
+
+    if st.sidebar.button("ログアウト"):
+        logout()
+
+# =====================================================
+# ログイン画面
+# =====================================================
+
+if not st.session_state.get("is_logged"):
+
+    st.title("🤝 Shared Note Sync")
+
+    name_input = st.text_input("表示名")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        if st.button("新しいノート"):
+
+            if name_input:
+
+                new_key = "-".join([
+                    "".join(
+                        random.choices(
+                            "ABCDEFGHJKLMNPQRSTUVWXYZ23456789",
+                            k=4
+                        )
+                    )
+                    for _ in range(7)
+                ])
+
+                get_rooms_ref().document(new_key).set({
+                    "createdAt": get_jst_now().isoformat()
+                })
+
+                login_action(new_key, name_input)
+
+                st.rerun()
+
+    with col2:
+
+        room_key_input = st.text_input("秘密鍵")
+
+        if st.button("参加"):
+
+            if room_key_input and name_input:
+
+                login_action(room_key_input, name_input)
+
+                st.rerun()
+
+    st.stop()
+
+# =====================================================
+# データ取得
+# =====================================================
+
+room_key = st.session_state.room_key
+user_name = st.session_state.user_name
+
+events = [
+    {"id": d.id, **d.to_dict()}
+    for d in get_events_ref()
+    .where("roomKey", "==", room_key)
+    .stream()
+]
+
+ng_dates = [
+    {"id": d.id, **d.to_dict()}
+    for d in get_ng_ref()
+    .where("roomKey", "==", room_key)
+    .stream()
+]
+
+# =====================================================
+# タブ
+# =====================================================
+
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📍 行きたい",
+    "📅 予定",
+    "🚫 NG日",
+    "🗓️ カレンダー"
+])
+
+# =====================================================
+# 行きたい
 # =====================================================
 
 with tab1:
@@ -231,9 +512,7 @@ with tab1:
                     st.write(f"🕒 {item['time']}")
 
                 if item.get("url"):
-                    st.markdown(
-                        f"[🔗 リンク]({item['url']})"
-                    )
+                    st.markdown(f"[🔗 リンク]({item['url']})")
 
                 if item.get("memo"):
                     st.info(item["memo"])
@@ -244,19 +523,16 @@ with tab1:
 
                     last_comment = comments[-1]
 
-                    color = last_comment.get(
-                        "color",
-                        "#666"
-                    )
+                    color = last_comment.get("color", "#666")
 
                     st.markdown(
-                        f'''
-<div class="last-message"
-style="border-left:5px solid {color};">
-<b>{last_comment["userName"]}</b><br>
-{last_comment["text"]}
+                        f"""
+<div class='last-message'
+style='border-left:5px solid {color};'>
+<b>{last_comment['userName']}</b><br>
+{last_comment['text']}
 </div>
-''',
+""",
                         unsafe_allow_html=True
                     )
 
@@ -267,32 +543,32 @@ style="border-left:5px solid {color};">
                         color = c.get("color", "#666")
 
                         st.markdown(
-                            f'''
-<div class="comment-box"
-style="border-left:5px solid {color};">
-<b>{c["userName"]}</b><br>
-{c["text"]}
+                            f"""
+<div class='comment-box'
+style='border-left:5px solid {color};'>
+<b>{c['userName']}</b><br>
+{c['text']}
 </div>
-''',
+""",
                             unsafe_allow_html=True
                         )
 
                     with st.form(
-                        key=f"comment_{item['id']}",
+                        key=f"comment_form_{item['id']}",
                         clear_on_submit=True
                     ):
 
-                        msg = st.text_input("コメント")
+                        new_comment = st.text_input("コメント")
 
-                        submit = st.form_submit_button("送信")
+                        submitted = st.form_submit_button("送信")
 
-                        if submit and msg:
+                        if submitted and new_comment:
 
                             get_events_ref().document(item["id"]).update({
                                 "comments": firestore.ArrayUnion([
                                     {
                                         "userName": user_name,
-                                        "text": msg,
+                                        "text": new_comment,
                                         "createdAt": get_jst_now().isoformat(),
                                         "color": st.session_state.user_color
                                     }
@@ -321,8 +597,37 @@ style="border-left:5px solid {color};">
                     st.rerun()
 
 # =====================================================
-# NGタブ修正版
-# with tab3: の中を全部これに置換
+# 予定
+# =====================================================
+
+with tab2:
+
+    scheduled = [
+        e for e in events
+        if e.get("status") == "scheduled"
+    ]
+
+    scheduled = sorted(
+        scheduled,
+        key=lambda x: x.get("date", "")
+    )
+
+    for item in scheduled:
+
+        with st.container(border=True):
+
+            st.markdown(
+                f"## 📅 {item.get('date', '')} {item['title']}"
+            )
+
+            if item.get("time"):
+                st.write(f"🕒 {item['time']}")
+
+            if item.get("memo"):
+                st.info(item["memo"])
+
+# =====================================================
+# NG日
 # =====================================================
 
 with tab3:
@@ -360,8 +665,7 @@ with tab3:
             )
 
 # =====================================================
-# カレンダー修正版
-# with tab4: の中を全部これに置換
+# カレンダー
 # =====================================================
 
 with tab4:
@@ -372,7 +676,7 @@ with tab4:
     month = now.month
     today = now.day
 
-    st.subheader(f"🗓️ {year}年{month}月")
+    st.subheader(f"🗓️ {year}年 {month}月")
 
     cal = calendar.Calendar(firstweekday=0)
 
