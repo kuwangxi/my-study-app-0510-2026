@@ -26,6 +26,8 @@ layout="wide"
 if "font_size" not in st.session_state:
 st.session_state.font_size = 14
 
+# フォントサイズ初期化
+
 if "edit_id" not in st.session_state:
 st.session_state.edit_id = None
 
@@ -604,7 +606,45 @@ st.divider()
 for n in ng_dates:
 
     with st.container(border=True):
-        st.write(f"🚫 {n['date']}  {n.get('reason', '')}")
+        if st.session_state.edit_id == n["id"]:
+            edit_date = st.date_input(
+                "日付変更",
+                value=datetime.strptime(n["date"], "%Y-%m-%d").date(),
+                key=f"ng_edit_date_{n['id']}"
+            )
+
+            edit_reason = st.text_input(
+                "理由変更",
+                n.get("reason", ""),
+                key=f"ng_edit_reason_{n['id']}"
+            )
+
+            c1, c2, c3 = st.columns(3)
+
+            if c1.button("保存", key=f"ng_save_{n['id']}"):
+                get_ng_ref().document(n["id"]).update({
+                    "date": str(edit_date),
+                    "reason": edit_reason
+                })
+                st.session_state.edit_id = None
+                st.rerun()
+
+            if c2.button("キャンセル", key=f"ng_cancel_{n['id']}"):
+                st.session_state.edit_id = None
+                st.rerun()
+
+            if c3.button("削除", key=f"ng_delete_{n['id']}"):
+                get_ng_ref().document(n["id"]).delete()
+                st.session_state.edit_id = None
+                st.rerun()
+
+        else:
+            c1, c2 = st.columns([6,1])
+            c1.write(f"🚫 {n['date']}  {n.get('reason', '')}")
+
+            if c2.button("📝", key=f"ng_edit_btn_{n['id']}"):
+                st.session_state.edit_id = n["id"]
+                st.rerun()
 ```
 
 # ==========================================
