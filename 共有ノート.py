@@ -2,12 +2,12 @@ import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
 import random
-from datetime import datetime, timedelta, timezone
 import calendar
+from datetime import datetime, timedelta, timezone
 
-# ==================================================
-# 基本設定
-# ==================================================
+# ==========================================
+# 初期設定
+# ==========================================
 
 st.set_page_config(
     page_title="ふたりの共有ノート",
@@ -15,9 +15,46 @@ st.set_page_config(
     layout="wide"
 )
 
-# ==================================================
+# ==========================================
+# セッション初期化
+# ==========================================
+
+defaults = {
+    "font_size": 14,
+    "show_summary": True,
+    "hide_empty_days": True,
+    "edit_id": None,
+    "input_title": "",
+    "input_url": "",
+    "input_memo": "",
+    "ng_reason": "",
+    "clear_wish_inputs": False,
+    "clear_ng_inputs": False,
+    "is_logged": False,
+    "user_color": "#22c55e"
+}
+
+for k, v in defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
+
+# ==========================================
+# 入力リセット
+# ==========================================
+
+if st.session_state.clear_wish_inputs:
+    st.session_state.input_title = ""
+    st.session_state.input_url = ""
+    st.session_state.input_memo = ""
+    st.session_state.clear_wish_inputs = False
+
+if st.session_state.clear_ng_inputs:
+    st.session_state.ng_reason = ""
+    st.session_state.clear_ng_inputs = False
+
+# ==========================================
 # JST
-# ==================================================
+# ==========================================
 
 JST = timezone(timedelta(hours=9))
 
@@ -25,48 +62,12 @@ def get_jst_now():
     return datetime.now(JST)
 
 def get_weekday_jp(dt):
-
     w_list = ['月', '火', '水', '木', '金', '土', '日']
-
     return w_list[dt.weekday()]
 
-# ==================================================
-# セッション
-# ==================================================
-
-defaults = {
-
-    "font_size": 14,
-    "edit_id": None,
-    "is_logged": False,
-
-    "input_title": "",
-    "input_url": "",
-    "input_memo": "",
-
-    "clear_inputs": False,
-
-    "user_color": "#22c55e"
-}
-
-for k, v in defaults.items():
-
-    if k not in st.session_state:
-        st.session_state[k] = v
-
-# 入力リセット
-
-if st.session_state.clear_inputs:
-
-    st.session_state.input_title = ""
-    st.session_state.input_url = ""
-    st.session_state.input_memo = ""
-
-    st.session_state.clear_inputs = False
-
-# ==================================================
+# ==========================================
 # Firebase
-# ==================================================
+# ==========================================
 
 if not firebase_admin._apps:
 
@@ -75,10 +76,7 @@ if not firebase_admin._apps:
         cred_dict = dict(st.secrets["firebase"])
 
         if "private_key" in cred_dict:
-
-            cred_dict["private_key"] = cred_dict[
-                "private_key"
-            ].replace("\\n", "\n")
+            cred_dict["private_key"] = cred_dict["private_key"].replace("\\n", "\n")
 
         cred = credentials.Certificate(cred_dict)
 
@@ -86,7 +84,7 @@ if not firebase_admin._apps:
 
     except Exception as e:
 
-        st.error(f"Firebase認証エラー : {e}")
+        st.error(f"Firebase認証エラー: {e}")
         st.stop()
 
 db = firestore.client()
@@ -94,32 +92,61 @@ db = firestore.client()
 APP_ID = "couple-secure-v2"
 
 def get_events_ref():
-
-    return db.collection("artifacts") \
-        .document(APP_ID) \
-        .collection("public") \
-        .document("data") \
-        .collection("secure_events")
+    return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_events')
 
 def get_ng_ref():
-
-    return db.collection("artifacts") \
-        .document(APP_ID) \
-        .collection("public") \
-        .document("data") \
-        .collection("secure_ng_dates")
+    return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_ng_dates')
 
 def get_rooms_ref():
+    return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_rooms')
 
-    return db.collection("artifacts") \
-        .document(APP_ID) \
-        .collection("public") \
-        .document("data") \
-        .collection("secure_rooms")
+# ==========================================
+# 設定保存
+# ==========================================
 
-# ==================================================
+def save_app_settings():
+
+    if st.session_state.get("room_key"):
+
+        get_rooms_ref().document(
+            st.session_state.room_key
+        ).set({
+
+            "settings": {
+
+                "font_size": st.session_state.font_size,
+                "show_summary": st.session_state.show_summary,
+                "hide_empty_days": st.session_state.hide_empty_days,
+                "user_color": st.session_state.user_color
+
+            }
+
+        }, merge=True)
+
+# ==========================================
+# 設定読み込み
+# ==========================================
+
+def load_app_settings(room_key):
+
+    doc = get_rooms_ref().document(room_key).get()
+
+    if doc.exists:
+
+        data = doc.to_dict()
+
+        if "settings" in data:
+
+            s = data["settings"]
+
+            st.session_state.font_size = s.get("font_size", 14)
+            st.session_state.show_summary = s.get("show_summary", True)
+            st.session_state.hide_empty_days = s.get("hide_empty_days", True)
+            st.session_state.user_color = s.get("user_color", "#22c55e")
+
+# ==========================================
 # CSS
-# ==================================================
+# ==========================================
 
 st.markdown(f"""
 
@@ -129,56 +156,47 @@ html, body, [class*="st-"] {{
     font-size: {st.session_state.font_size}px !important;
 }}
 
-.block-container {{
-    padding-top: 1rem;
+.past-item {{
+    color: #9e9e9e;
 }}
 
 .time-badge {{
     background-color: rgba(128,128,128,0.2);
     padding: 2px 6px;
-    border-radius: 999px;
+    border-radius: 6px;
     font-size: 11px;
 }}
 
-.last-message-box {{
-    background: rgba(255,255,255,0.04);
+.chat-preview {{
     padding: 8px;
     border-radius: 10px;
-    margin-top: 8px;
-}}
-
-.chat-bubble {{
-    padding: 10px;
-    border-radius: 14px;
+    margin-top: 10px;
     color: white;
-    margin-bottom: 8px;
-    word-break: break-word;
+    font-size: 13px;
 }}
 
-.calendar-card {{
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 14px;
+.calendar-box {{
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
     padding: 8px;
     min-height: 130px;
-    background: rgba(255,255,255,0.02);
+    background: rgba(255,255,255,0.03);
 }}
 
-.today-circle {{
-    background: #ef4444;
-    color: white;
-    width: 30px;
-    height: 30px;
-    border-radius: 999px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+.today-box {{
+    background: rgba(244,63,94,0.2);
+    border: 2px solid #f43f5e;
+}}
+
+.calendar-date {{
     font-weight: bold;
+    margin-bottom: 8px;
 }}
 
 .event-pill {{
     background: #16a34a;
     color: white;
-    border-radius: 8px;
+    border-radius: 6px;
     padding: 3px 6px;
     font-size: 11px;
     margin-bottom: 4px;
@@ -187,7 +205,7 @@ html, body, [class*="st-"] {{
 .ng-pill {{
     background: #dc2626;
     color: white;
-    border-radius: 8px;
+    border-radius: 6px;
     padding: 3px 6px;
     font-size: 11px;
     margin-bottom: 4px;
@@ -195,14 +213,12 @@ html, body, [class*="st-"] {{
 
 @media (max-width: 768px) {{
 
-    .calendar-mobile-scroll {{
+    .calendar-scroll {{
         overflow-x: auto;
-        white-space: nowrap;
-        padding-bottom: 10px;
     }}
 
-    .calendar-mobile-grid {{
-        min-width: 720px;
+    .calendar-inner {{
+        min-width: 900px;
     }}
 
 }}
@@ -211,82 +227,154 @@ html, body, [class*="st-"] {{
 
 """, unsafe_allow_html=True)
 
-# ==================================================
+# ==========================================
 # 時間UI
-# ==================================================
+# ==========================================
 
 def time_selector_ui(key_prefix):
 
     t_type = st.selectbox(
         "時間指定",
         ["指定なし", "午前中", "午後", "終日", "カスタム"],
-        key=f"time_type_{key_prefix}"
+        key=f"t_type_{key_prefix}"
     )
 
     if t_type == "カスタム":
 
-        col1, col2 = st.columns(2)
+        c1, c2 = st.columns(2)
 
-        start = col1.time_input(
+        t_start = c1.time_input(
             "開始",
             value=get_jst_now().time(),
-            key=f"start_{key_prefix}"
+            key=f"t_start_{key_prefix}"
         )
 
-        end = col2.time_input(
+        t_end = c2.time_input(
             "終了",
             value=(get_jst_now() + timedelta(hours=2)).time(),
-            key=f"end_{key_prefix}"
+            key=f"t_end_{key_prefix}"
         )
 
-        return f"{start.strftime('%H:%M')}～{end.strftime('%H:%M')}"
+        return f"{t_start.strftime('%H:%M')}～{t_end.strftime('%H:%M')}"
 
     return None if t_type == "指定なし" else t_type
 
-# ==================================================
-# URLログイン保持
-# ==================================================
+# ==========================================
+# ログイン維持
+# ==========================================
 
 if not st.session_state.is_logged:
 
     q_room = st.query_params.get("room")
     q_user = st.query_params.get("user")
-    q_color = st.query_params.get("color")
 
     if q_room and q_user:
 
         st.session_state.room_key = q_room
         st.session_state.user_name = q_user
-        st.session_state.user_color = q_color or "#22c55e"
         st.session_state.is_logged = True
 
-# ==================================================
-# ログイン
-# ==================================================
+        load_app_settings(q_room)
 
-if not st.session_state.is_logged:
+# ==========================================
+# ログイン
+# ==========================================
+
+def login_action(room, user):
+
+    st.session_state.room_key = room
+    st.session_state.user_name = user
+    st.session_state.is_logged = True
+
+    st.query_params["room"] = room
+    st.query_params["user"] = user
+
+    load_app_settings(room)
+
+def logout():
+
+    st.session_state.is_logged = False
+
+    st.query_params.clear()
+
+    st.rerun()
+
+# ==========================================
+# サイドバー
+# ==========================================
+
+if st.session_state.is_logged:
+
+    st.sidebar.title("⚙️ アプリ設定")
+
+    new_size = st.sidebar.slider(
+        "文字サイズ",
+        10,
+        30,
+        value=st.session_state.font_size
+    )
+
+    new_show_summary = st.sidebar.checkbox(
+        "サマリー表示",
+        value=st.session_state.show_summary
+    )
+
+    new_hide_empty = st.sidebar.checkbox(
+        "予定がある日のみ",
+        value=st.session_state.hide_empty_days
+    )
+
+    new_color = st.sidebar.color_picker(
+        "自分の色",
+        value=st.session_state.user_color
+    )
+
+    if (
+        new_size != st.session_state.font_size
+        or new_show_summary != st.session_state.show_summary
+        or new_hide_empty != st.session_state.hide_empty_days
+        or new_color != st.session_state.user_color
+    ):
+
+        st.session_state.font_size = new_size
+        st.session_state.show_summary = new_show_summary
+        st.session_state.hide_empty_days = new_hide_empty
+        st.session_state.user_color = new_color
+
+        save_app_settings()
+
+        st.rerun()
+
+    st.sidebar.divider()
+
+    st.sidebar.caption(f"User : {st.session_state.user_name}")
+    st.sidebar.caption(f"Key : {st.session_state.room_key}")
+
+    if st.sidebar.button("ログアウト", use_container_width=True):
+        logout()
+
+# ==========================================
+# ログイン画面
+# ==========================================
+
+if not st.session_state.get("is_logged"):
 
     st.title("🤝 Shared Note Sync")
 
-    name = st.text_input("表示名")
+    name_input = st.text_input("表示名")
 
-    color = st.color_picker(
-        "自分の色",
-        "#22c55e"
-    )
+    if name_input:
 
-    room_key = st.text_input("ルームキー")
+        st.session_state.user_name = name_input
 
-    col1, col2 = st.columns(2)
+        col1, col2 = st.columns(2)
 
-    with col1:
+        with col1:
 
-        if st.button(
-            "新規作成",
-            use_container_width=True
-        ):
-
-            if name:
+            if st.button(
+                "新しいノートを作る",
+                use_container_width=True
+            ):
 
                 new_key = '-'.join([
 
@@ -300,92 +388,48 @@ if not st.session_state.is_logged:
                 ])
 
                 get_rooms_ref().document(new_key).set({
-                    "createdAt": get_jst_now().isoformat()
+
+                    'createdAt': get_jst_now().isoformat(),
+
+                    'creator': name_input,
+
+                    'settings': {
+                        "font_size": 14,
+                        "show_summary": True,
+                        "hide_empty_days": True,
+                        "user_color": "#22c55e"
+                    }
+
                 })
 
-                st.session_state.room_key = new_key
-                st.session_state.user_name = name
-                st.session_state.user_color = color
-                st.session_state.is_logged = True
-
-                st.query_params["room"] = new_key
-                st.query_params["user"] = name
-                st.query_params["color"] = color
+                login_action(new_key, name_input)
 
                 st.rerun()
 
-    with col2:
+        with col2:
 
-        if st.button(
-            "参加",
-            use_container_width=True
-        ):
+            input_key = st.text_input(
+                "秘密鍵",
+                placeholder="XXXX-XXXX..."
+            )
 
-            if room_key and name:
+            if st.button(
+                "参加する",
+                use_container_width=True
+            ) and len(input_key) >= 29:
 
-                st.session_state.room_key = room_key
-                st.session_state.user_name = name
-                st.session_state.user_color = color
-                st.session_state.is_logged = True
-
-                st.query_params["room"] = room_key
-                st.query_params["user"] = name
-                st.query_params["color"] = color
+                login_action(input_key, name_input)
 
                 st.rerun()
 
     st.stop()
 
-# ==================================================
-# サイドバー
-# ==================================================
-
-with st.sidebar:
-
-    st.title("⚙️ 設定")
-
-    size = st.slider(
-        "文字サイズ",
-        10,
-        30,
-        st.session_state.font_size
-    )
-
-    if size != st.session_state.font_size:
-
-        st.session_state.font_size = size
-        st.rerun()
-
-    new_color = st.color_picker(
-        "自分の色",
-        st.session_state.user_color
-    )
-
-    if new_color != st.session_state.user_color:
-
-        st.session_state.user_color = new_color
-
-        st.query_params["color"] = new_color
-
-        st.rerun()
-
-    st.divider()
-
-    st.caption(
-        f"ユーザー : {st.session_state.user_name}"
-    )
-
-    st.caption(
-        f"ルーム : {st.session_state.room_key}"
-    )
-
-# ==================================================
+# ==========================================
 # データ取得
-# ==================================================
+# ==========================================
 
 room_key = st.session_state.room_key
 user_name = st.session_state.user_name
-user_color = st.session_state.user_color
 
 events = [
 
@@ -407,11 +451,11 @@ ng_dates = [
 
 ]
 
-today = get_jst_now().date()
+today_str = str(get_jst_now().date())
 
-# ==================================================
+# ==========================================
 # タブ
-# ==================================================
+# ==========================================
 
 tab1, tab2, tab3, tab4 = st.tabs([
     "📍 行きたい",
@@ -420,33 +464,25 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "🗓️ カレンダー"
 ])
 
-# ==================================================
+# ==========================================
 # 行きたい
-# ==================================================
+# ==========================================
 
 with tab1:
 
-    with st.expander("＋追加"):
+    with st.expander("＋ 追加する"):
 
-        t = st.text_input(
-            "場所/内容",
-            key="input_title"
-        )
+        t = st.text_input("場所/内容", key="input_title")
 
-        u = st.text_input(
-            "URL",
-            key="input_url"
-        )
+        u = st.text_input("URL", key="input_url")
 
-        m = st.text_area(
-            "メモ",
-            key="input_memo"
-        )
+        m = st.text_area("メモ", key="input_memo")
 
         wt = time_selector_ui("wish")
 
         if st.button(
             "追加",
+            use_container_width=True,
             type="primary"
         ):
 
@@ -466,7 +502,7 @@ with tab1:
 
                 })
 
-                st.session_state.clear_inputs = True
+                st.session_state.clear_wish_inputs = True
 
                 st.rerun()
 
@@ -482,7 +518,6 @@ with tab1:
         comments = item.get("comments", [])
 
         if comments:
-
             return comments[-1].get("createdAt", "")
 
         return item.get("createdAt", "")
@@ -497,24 +532,23 @@ with tab1:
 
         comments = item.get("comments", [])
 
-        latest_color = "#444"
+        latest_color = "#666"
 
         if comments:
-
             latest_color = comments[-1].get(
                 "color",
-                "#444"
+                "#666"
             )
 
         with st.container(border=True):
 
-            c1, c2 = st.columns([7,1])
+            c1, c2 = st.columns([5,1])
 
-            time_html = ""
+            time_disp = ""
 
             if item.get("time"):
 
-                time_html = f"""
+                time_disp = f"""
                 <span class='time-badge'>
                 ⏰ {item['time']}
                 </span>
@@ -523,13 +557,10 @@ with tab1:
             c1.markdown(
                 f"""
                 <div style="
-                    border-left: 8px solid {latest_color};
-                    padding-left: 10px;
+                    border-left:8px solid {latest_color};
+                    padding-left:10px;
                 ">
-                    <h3>
-                        {time_html}
-                        {item['title']}
-                    </h3>
+                <h3>{time_disp} {item['title']}</h3>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -537,41 +568,40 @@ with tab1:
 
             if c2.button(
                 "📝",
-                key=f"edit_{item['id']}"
+                key=f"ed_{item['id']}"
             ):
 
                 st.session_state.edit_id = item["id"]
+
                 st.rerun()
 
             # 編集
 
             if st.session_state.edit_id == item["id"]:
 
-                st.divider()
-
-                new_title = st.text_input(
-                    "タイトル",
-                    value=item.get("title", ""),
-                    key=f"title_{item['id']}"
+                et = st.text_input(
+                    "編集タイトル",
+                    item["title"],
+                    key=f"et_{item['id']}"
                 )
 
-                new_url = st.text_input(
-                    "URL",
-                    value=item.get("url", ""),
-                    key=f"url_{item['id']}"
+                eu = st.text_input(
+                    "編集URL",
+                    item.get("url",""),
+                    key=f"eu_{item['id']}"
                 )
 
-                new_memo = st.text_area(
-                    "メモ",
-                    value=item.get("memo", ""),
-                    key=f"memo_{item['id']}"
+                em = st.text_area(
+                    "編集メモ",
+                    item.get("memo",""),
+                    key=f"em_{item['id']}"
                 )
 
-                col_a, col_b, col_c = st.columns(3)
+                c_a, c_b, c_c = st.columns(3)
 
-                if col_a.button(
+                if c_a.button(
                     "保存",
-                    key=f"save_{item['id']}",
+                    key=f"sv_{item['id']}",
                     use_container_width=True
                 ):
 
@@ -579,27 +609,29 @@ with tab1:
                         item["id"]
                     ).update({
 
-                        "title": new_title,
-                        "url": new_url,
-                        "memo": new_memo
+                        "title": et,
+                        "url": eu,
+                        "memo": em
 
                     })
 
                     st.session_state.edit_id = None
+
                     st.rerun()
 
-                if col_b.button(
+                if c_b.button(
                     "キャンセル",
-                    key=f"cancel_{item['id']}",
+                    key=f"cn_{item['id']}",
                     use_container_width=True
                 ):
 
                     st.session_state.edit_id = None
+
                     st.rerun()
 
-                if col_c.button(
+                if c_c.button(
                     "削除",
-                    key=f"delete_{item['id']}",
+                    key=f"del_{item['id']}",
                     use_container_width=True
                 ):
 
@@ -608,30 +640,27 @@ with tab1:
                     ).delete()
 
                     st.session_state.edit_id = None
+
                     st.rerun()
 
             if item.get("url"):
-
-                st.markdown(
-                    f"[🔗 リンク]({item['url']})"
-                )
+                st.markdown(f"[🔗 リンク]({item['url']})")
 
             if item.get("memo"):
-
                 st.info(item["memo"])
 
-            # 最新1件
+            # 最新メッセージ1件
 
             if comments:
 
-                msg = comments[-1]
+                last_msg = comments[-1]
 
                 st.markdown(
                     f"""
-                    <div class='last-message-box'
-                    style='border-left:6px solid {msg.get("color","#444")}'>
-                        <b>{msg['userName']}</b><br>
-                        {msg['text']}
+                    <div class='chat-preview'
+                    style='background:{last_msg.get("color","#666")}'>
+                    <b>{last_msg["userName"]}</b><br>
+                    {last_msg["text"]}
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -641,44 +670,36 @@ with tab1:
 
                 for c in comments:
 
-                    align = "flex-start"
-
-                    if c["userName"] == user_name:
-                        align = "flex-end"
-
                     st.markdown(
                         f"""
                         <div style="
-                            display:flex;
-                            justify-content:{align};
+                            background:{c.get('color','#666')};
+                            color:white;
+                            padding:10px;
+                            border-radius:10px;
+                            margin-bottom:8px;
                         ">
-                            <div class='chat-bubble'
-                            style='background:{c.get("color","#444")};
-                            max-width:80%;'>
-                                <b>{c['userName']}</b><br>
-                                {c['text']}
-                            </div>
+                        <b>{c['userName']}</b><br>
+                        {c['text']}
                         </div>
                         """,
                         unsafe_allow_html=True
                     )
 
                 with st.form(
-                    key=f"form_{item['id']}",
+                    key=f"comment_form_{item['id']}",
                     clear_on_submit=True
                 ):
 
                     cc1, cc2 = st.columns([5,1])
 
-                    new_msg = cc1.text_input(
+                    new_c = cc1.text_input(
                         "メッセージ"
                     )
 
-                    submit = cc2.form_submit_button(
-                        "送信"
-                    )
+                    send = cc2.form_submit_button("送信")
 
-                    if submit and new_msg:
+                    if send and new_c:
 
                         get_events_ref().document(
                             item["id"]
@@ -688,8 +709,8 @@ with tab1:
                             firestore.ArrayUnion([{
 
                                 "userName": user_name,
-                                "text": new_msg,
-                                "color": user_color,
+                                "text": new_c,
+                                "color": st.session_state.user_color,
                                 "createdAt":
                                 get_jst_now().isoformat()
 
@@ -701,13 +722,13 @@ with tab1:
 
                 st.divider()
 
-                fix_date = st.date_input(
+                sd = st.date_input(
                     "確定日",
-                    value=today,
-                    key=f"fix_date_{item['id']}"
+                    value=get_jst_now().date(),
+                    key=f"sd_{item['id']}"
                 )
 
-                fix_time = time_selector_ui(
+                st_time = time_selector_ui(
                     f"fix_{item['id']}"
                 )
 
@@ -721,20 +742,20 @@ with tab1:
                     ).update({
 
                         "status": "scheduled",
-                        "date": str(fix_date),
-                        "time": fix_time
+                        "date": str(sd),
+                        "time": st_time
 
                     })
 
                     st.rerun()
 
-# ==================================================
+# ==========================================
 # 予定
-# ==================================================
+# ==========================================
 
 with tab2:
 
-    st.subheader("📅 予定一覧")
+    st.subheader("🚀 これからの予定")
 
     sched = [
 
@@ -743,19 +764,18 @@ with tab2:
 
     ]
 
-    sched = sorted(
+    upcoming = sorted(
         sched,
         key=lambda x: (
-            x.get("date", ""),
+            x.get("date",""),
             x.get("time") or ""
         )
     )
 
-    if not sched:
-
+    if not upcoming:
         st.write("予定はありません")
 
-    for item in sched:
+    for item in upcoming:
 
         with st.container(border=True):
 
@@ -780,25 +800,30 @@ with tab2:
                 f"📍 {item['title']}"
             )
 
-# ==================================================
+# ==========================================
 # NG日
-# ==================================================
+# ==========================================
 
 with tab3:
 
-    st.subheader("🚫 NG日登録")
+    st.subheader("🚫 NG日")
 
     nd = st.date_input(
         "行けない日",
-        value=today
+        value=get_jst_now().date(),
+        key="ng_date_input"
     )
 
-    nt = time_selector_ui("ng")
+    nt_str = time_selector_ui("ng_add")
 
-    nr = st.text_input("理由")
+    nr = st.text_input(
+        "理由",
+        key="ng_reason"
+    )
 
     if st.button(
         "NG登録",
+        use_container_width=True,
         type="primary"
     ):
 
@@ -808,9 +833,11 @@ with tab3:
             "userName": user_name,
             "date": str(nd),
             "reason": nr,
-            "time": nt
+            "time": nt_str
 
         })
+
+        st.session_state.clear_ng_inputs = True
 
         st.rerun()
 
@@ -823,43 +850,24 @@ with tab3:
 
         with st.container(border=True):
 
-            st.write(
-                f"📅 {n.get('date','')}"
-            )
+            st.write(f"📅 {n.get('date','')}")
+            st.write(f"⏰ {n.get('time','時間未定')}")
+            st.write(f"🚫 {n.get('reason','')}")
 
-            st.write(
-                f"⏰ {n.get('time','時間未定')}"
-            )
-
-            st.write(
-                f"🚫 {n.get('reason','')}"
-            )
-
-# ==================================================
+# ==========================================
 # カレンダー
-# ==================================================
+# ==========================================
 
 with tab4:
 
-    current = get_jst_now().date()
+    now = get_jst_now()
 
-    selected = st.date_input(
-        "表示月",
-        value=current,
-        key="calendar"
-    )
+    year = now.year
+    month = now.month
 
-    year = selected.year
-    month = selected.month
+    st.markdown(f"## {year}年 {month}月")
 
-    st.markdown(
-        f"# {year}年 {month}月"
-    )
-
-    cal = calendar.monthcalendar(
-        year,
-        month
-    )
+    cal = calendar.monthcalendar(year, month)
 
     weekdays = [
         "月", "火", "水",
@@ -867,12 +875,12 @@ with tab4:
     ]
 
     st.markdown(
-        "<div class='calendar-mobile-scroll'>",
+        "<div class='calendar-scroll'>",
         unsafe_allow_html=True
     )
 
     st.markdown(
-        "<div class='calendar-mobile-grid'>",
+        "<div class='calendar-inner'>",
         unsafe_allow_html=True
     )
 
@@ -893,7 +901,6 @@ with tab4:
             with cols[idx]:
 
                 if day == 0:
-
                     st.empty()
                     continue
 
@@ -921,78 +928,71 @@ with tab4:
 
                 ]
 
-                with st.container():
+                today_cls = ""
+
+                if target_date == get_jst_now().date():
+                    today_cls = "today-box"
+
+                st.markdown(
+                    f"""
+                    <div class='calendar-box {today_cls}'>
+                    <div class='calendar-date'>
+                    {day}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+                for ev in day_events[:3]:
 
                     st.markdown(
-                        "<div class='calendar-card'>",
+                        f"""
+                        <div class='event-pill'>
+                        📍 {ev['title']}
+                        </div>
+                        """,
                         unsafe_allow_html=True
                     )
 
-                    if target_date == today:
-
-                        st.markdown(
-                            f"""
-                            <div class='today-circle'>
-                            {day}
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-
-                    else:
-
-                        st.markdown(f"### {day}")
-
-                    for ev in day_events[:3]:
-
-                        st.markdown(
-                            f"""
-                            <div class='event-pill'>
-                            📍 {ev['title']}
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-
-                    for ng in day_ng[:2]:
-
-                        st.markdown(
-                            f"""
-                            <div class='ng-pill'>
-                            🚫 {ng.get('reason','NG')}
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
-
-                    if day_events or day_ng:
-
-                        with st.expander("詳細"):
-
-                            for ev in day_events:
-
-                                st.write(
-                                    f"""
-                                    📍
-                                    {ev.get('time','時間未定')}
-                                    - {ev['title']}
-                                    """
-                                )
-
-                            for ng in day_ng:
-
-                                st.write(
-                                    f"""
-                                    🚫
-                                    {ng.get('time','時間未定')}
-                                    - {ng.get('reason','')}
-                                    """
-                                )
+                for ng in day_ng[:2]:
 
                     st.markdown(
-                        "</div>",
+                        f"""
+                        <div class='ng-pill'>
+                        🚫 {ng.get('reason','NG')}
+                        </div>
+                        """,
                         unsafe_allow_html=True
                     )
+
+                if day_events or day_ng:
+
+                    with st.expander("詳細"):
+
+                        for ev in day_events:
+
+                            st.write(
+                                f"""
+                                📍
+                                {ev.get('time','時間未定')}
+                                - {ev['title']}
+                                """
+                            )
+
+                        for ng in day_ng:
+
+                            st.write(
+                                f"""
+                                🚫
+                                {ng.get('time','時間未定')}
+                                - {ng.get('reason','')}
+                                """
+                            )
+
+                st.markdown(
+                    "</div>",
+                    unsafe_allow_html=True
+                )
 
     st.markdown(
         "</div>",
