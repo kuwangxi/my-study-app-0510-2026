@@ -5,9 +5,9 @@ import random
 from datetime import datetime, timedelta, timezone
 import calendar
 
-# ==========================================
-# 初期設定
-# ==========================================
+# ==================================================
+# 基本設定
+# ==================================================
 
 st.set_page_config(
     page_title="ふたりの共有ノート",
@@ -15,9 +15,9 @@ st.set_page_config(
     layout="wide"
 )
 
-# ==========================================
+# ==================================================
 # JST
-# ==========================================
+# ==================================================
 
 JST = timezone(timedelta(hours=9))
 
@@ -30,18 +30,22 @@ def get_weekday_jp(dt):
 
     return w_list[dt.weekday()]
 
-# ==========================================
+# ==================================================
 # セッション
-# ==========================================
+# ==================================================
 
 defaults = {
+
     "font_size": 14,
     "edit_id": None,
     "is_logged": False,
+
     "input_title": "",
     "input_url": "",
     "input_memo": "",
+
     "clear_inputs": False,
+
     "user_color": "#22c55e"
 }
 
@@ -60,9 +64,9 @@ if st.session_state.clear_inputs:
 
     st.session_state.clear_inputs = False
 
-# ==========================================
+# ==================================================
 # Firebase
-# ==========================================
+# ==================================================
 
 if not firebase_admin._apps:
 
@@ -113,9 +117,9 @@ def get_rooms_ref():
         .document("data") \
         .collection("secure_rooms")
 
-# ==========================================
+# ==================================================
 # CSS
-# ==========================================
+# ==================================================
 
 st.markdown(f"""
 
@@ -155,15 +159,15 @@ html, body, [class*="st-"] {{
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 14px;
     padding: 8px;
-    min-height: 120px;
+    min-height: 130px;
     background: rgba(255,255,255,0.02);
 }}
 
 .today-circle {{
     background: #ef4444;
     color: white;
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
     border-radius: 999px;
     display: flex;
     align-items: center;
@@ -198,7 +202,7 @@ html, body, [class*="st-"] {{
     }}
 
     .calendar-mobile-grid {{
-        min-width: 700px;
+        min-width: 720px;
     }}
 
 }}
@@ -207,9 +211,9 @@ html, body, [class*="st-"] {{
 
 """, unsafe_allow_html=True)
 
-# ==========================================
+# ==================================================
 # 時間UI
-# ==========================================
+# ==================================================
 
 def time_selector_ui(key_prefix):
 
@@ -239,9 +243,9 @@ def time_selector_ui(key_prefix):
 
     return None if t_type == "指定なし" else t_type
 
-# ==========================================
+# ==================================================
 # URLログイン保持
-# ==========================================
+# ==================================================
 
 if not st.session_state.is_logged:
 
@@ -256,9 +260,9 @@ if not st.session_state.is_logged:
         st.session_state.user_color = q_color or "#22c55e"
         st.session_state.is_logged = True
 
-# ==========================================
+# ==================================================
 # ログイン
-# ==========================================
+# ==================================================
 
 if not st.session_state.is_logged:
 
@@ -332,9 +336,9 @@ if not st.session_state.is_logged:
 
     st.stop()
 
-# ==========================================
+# ==================================================
 # サイドバー
-# ==========================================
+# ==================================================
 
 with st.sidebar:
 
@@ -352,6 +356,19 @@ with st.sidebar:
         st.session_state.font_size = size
         st.rerun()
 
+    new_color = st.color_picker(
+        "自分の色",
+        st.session_state.user_color
+    )
+
+    if new_color != st.session_state.user_color:
+
+        st.session_state.user_color = new_color
+
+        st.query_params["color"] = new_color
+
+        st.rerun()
+
     st.divider()
 
     st.caption(
@@ -362,9 +379,9 @@ with st.sidebar:
         f"ルーム : {st.session_state.room_key}"
     )
 
-# ==========================================
+# ==================================================
 # データ取得
-# ==========================================
+# ==================================================
 
 room_key = st.session_state.room_key
 user_name = st.session_state.user_name
@@ -392,9 +409,9 @@ ng_dates = [
 
 today = get_jst_now().date()
 
-# ==========================================
+# ==================================================
 # タブ
-# ==========================================
+# ==================================================
 
 tab1, tab2, tab3, tab4 = st.tabs([
     "📍 行きたい",
@@ -403,9 +420,9 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "🗓️ カレンダー"
 ])
 
-# ==========================================
+# ==================================================
 # 行きたい
-# ==========================================
+# ==================================================
 
 with tab1:
 
@@ -466,10 +483,7 @@ with tab1:
 
         if comments:
 
-            return max([
-                c.get("createdAt", "")
-                for c in comments
-            ])
+            return comments[-1].get("createdAt", "")
 
         return item.get("createdAt", "")
 
@@ -482,8 +496,6 @@ with tab1:
     for item in wishlist:
 
         comments = item.get("comments", [])
-
-        last_two = comments[-2:]
 
         latest_color = "#444"
 
@@ -523,8 +535,6 @@ with tab1:
                 unsafe_allow_html=True
             )
 
-            # 編集ボタン復元
-
             if c2.button(
                 "📝",
                 key=f"edit_{item['id']}"
@@ -533,7 +543,7 @@ with tab1:
                 st.session_state.edit_id = item["id"]
                 st.rerun()
 
-            # 編集モード
+            # 編集
 
             if st.session_state.edit_id == item["id"]:
 
@@ -610,24 +620,22 @@ with tab1:
 
                 st.info(item["memo"])
 
-            # 最新2件
+            # 最新1件
 
-            if last_two:
+            if comments:
 
-                st.markdown("##### 最新メッセージ")
+                msg = comments[-1]
 
-                for msg in reversed(last_two):
-
-                    st.markdown(
-                        f"""
-                        <div class='last-message-box'
-                        style='border-left:6px solid {msg.get("color","#444")}'>
-                            <b>{msg['userName']}</b><br>
-                            {msg['text']}
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
+                st.markdown(
+                    f"""
+                    <div class='last-message-box'
+                    style='border-left:6px solid {msg.get("color","#444")}'>
+                        <b>{msg['userName']}</b><br>
+                        {msg['text']}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
             with st.expander("💬 相談・確定"):
 
@@ -720,9 +728,9 @@ with tab1:
 
                     st.rerun()
 
-# ==========================================
+# ==================================================
 # 予定
-# ==========================================
+# ==================================================
 
 with tab2:
 
@@ -772,9 +780,9 @@ with tab2:
                 f"📍 {item['title']}"
             )
 
-# ==========================================
-# NG
-# ==========================================
+# ==================================================
+# NG日
+# ==================================================
 
 with tab3:
 
@@ -827,9 +835,9 @@ with tab3:
                 f"🚫 {n.get('reason','')}"
             )
 
-# ==========================================
+# ==================================================
 # カレンダー
-# ==========================================
+# ==================================================
 
 with tab4:
 
