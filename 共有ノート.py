@@ -40,6 +40,19 @@ if "input_memo" not in st.session_state:
 if "ng_reason" not in st.session_state:
     st.session_state.ng_reason = ""
 
+# 追加後リセット用
+if "clear_inputs" not in st.session_state:
+    st.session_state.clear_inputs = False
+
+# 入力リセット
+if st.session_state.clear_inputs:
+
+    st.session_state.input_title = ""
+    st.session_state.input_url = ""
+    st.session_state.input_memo = ""
+
+    st.session_state.clear_inputs = False
+
 # ==========================================
 # 共通関数
 # ==========================================
@@ -166,8 +179,8 @@ html, body, [class*="st-"] {{
 }}
 
 .calendar-today-number {{
-    background: white;
-    color: black;
+    background: #22c55e;
+    color: white;
     width: 28px;
     height: 28px;
     border-radius: 999px;
@@ -321,7 +334,8 @@ ng_dates = [
 
 ]
 
-today_str = str(get_jst_now().date())
+today_jst = get_jst_now().date()
+today_str = str(today_jst)
 
 # ==========================================
 # タブ
@@ -342,11 +356,20 @@ with tab1:
 
     with st.expander("＋追加"):
 
-        t = st.text_input("場所/内容")
+        t = st.text_input(
+            "場所/内容",
+            key="input_title"
+        )
 
-        u = st.text_input("URL")
+        u = st.text_input(
+            "URL",
+            key="input_url"
+        )
 
-        m = st.text_area("メモ")
+        m = st.text_area(
+            "メモ",
+            key="input_memo"
+        )
 
         wt = time_selector_ui("wish")
 
@@ -367,6 +390,9 @@ with tab1:
                     "createdAt": get_jst_now().isoformat()
 
                 })
+
+                # 入力リセット
+                st.session_state.clear_inputs = True
 
                 st.rerun()
 
@@ -641,7 +667,7 @@ with tab4:
 
                 target_str = str(target_date)
 
-                is_today = target_date == current_date
+                is_today = target_date == today_jst
 
                 day_events = [
 
