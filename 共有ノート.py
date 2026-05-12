@@ -36,20 +36,6 @@ for k, v in defaults.items():
         st.session_state[k] = v
 
 # =====================================================
-# 入力リセット
-# =====================================================
-
-if st.session_state.clear_wish_inputs:
-    st.session_state.input_title = ""
-    st.session_state.input_url = ""
-    st.session_state.input_memo = ""
-    st.session_state.clear_wish_inputs = False
-
-if st.session_state.clear_ng_inputs:
-    st.session_state.ng_reason = ""
-    st.session_state.clear_ng_inputs = False
-
-# =====================================================
 # 時刻
 # =====================================================
 
@@ -103,7 +89,7 @@ def get_rooms_ref():
     )
 
 # =====================================================
-# ログイン保持
+# ログイン状態
 # =====================================================
 
 if "is_logged" not in st.session_state:
@@ -112,10 +98,13 @@ if "is_logged" not in st.session_state:
     q_user = st.query_params.get("user")
 
     if q_room and q_user:
+
         st.session_state.room_key = q_room
         st.session_state.user_name = q_user
         st.session_state.is_logged = True
+
     else:
+
         st.session_state.is_logged = False
 
 def login_action(room, user):
@@ -147,45 +136,54 @@ html, body, [class*="st-"] {{
     font-size:{st.session_state.font_size}px !important;
 }}
 
-.calendar-wrap {{
-    width:100%;
-    overflow-x:auto;
+.last-message {{
+    background:#1a1a1a;
+    border-radius:10px;
+    padding:10px;
+    margin-top:10px;
 }}
 
-.calendar-grid {{
+.comment-box {{
+    background:#141414;
+    border-radius:10px;
+    padding:10px;
+    margin-bottom:8px;
+}}
+
+.google-calendar {{
     display:grid;
-    grid-template-columns:repeat(7, minmax(110px,1fr));
-    gap:1px;
-    background:#222;
+    grid-template-columns:repeat(7,1fr);
+    width:100%;
     border:1px solid #222;
-    border-radius:12px;
+    background:#111;
+}}
+
+.google-head {{
+    background:#111;
+    color:#999;
+    text-align:center;
+    padding:12px 0;
+    font-weight:bold;
+    border-bottom:1px solid #222;
+}}
+
+.google-cell {{
+    min-height:140px;
+    border-right:1px solid #222;
+    border-bottom:1px solid #222;
+    padding:6px;
+    background:#000;
     overflow:hidden;
 }}
 
-.calendar-head {{
-    background:#111;
-    text-align:center;
-    padding:10px 4px;
-    font-weight:bold;
-    color:#aaa;
-}}
-
-.calendar-cell {{
-    background:#000;
-    min-height:140px;
-    padding:6px;
-    position:relative;
-}}
-
-.today-cell {{
-    background:#171717;
-    border:2px solid #ff4b6e;
-}}
-
-.day-number {{
+.google-date {{
     font-size:18px;
     margin-bottom:6px;
-    font-weight:bold;
+}}
+
+.today {{
+    background:#151515;
+    border:2px solid #ff4b6e;
 }}
 
 .sat {{
@@ -196,61 +194,40 @@ html, body, [class*="st-"] {{
     color:#ff5b5b;
 }}
 
-.other-month {{
-    opacity:0.35;
+.other {{
+    opacity:0.3;
 }}
 
-.calendar-event {{
-    font-size:11px;
+.event {{
+    background:#1f8f5f;
+    color:white;
     border-radius:6px;
-    padding:3px 6px;
+    padding:2px 6px;
     margin-bottom:4px;
+    font-size:11px;
     overflow:hidden;
     white-space:nowrap;
     text-overflow:ellipsis;
-    color:white;
 }}
 
-.event-normal {{
-    background:#1f8f5f;
-}}
-
-.event-ng {{
+.ng {{
     background:#b03b3b;
-}}
-
-.last-message {{
-    background:#1f1f1f;
-    border-radius:10px;
-    padding:8px;
-    margin-top:8px;
-}}
-
-.comment-box {{
-    padding:8px;
-    border-radius:10px;
-    margin-bottom:8px;
-    background:#1a1a1a;
 }}
 
 @media (max-width:768px) {{
 
-    .calendar-grid {{
-        grid-template-columns:repeat(7, minmax(52px,1fr));
-    }}
-
-    .calendar-cell {{
-        min-height:90px;
+    .google-cell {{
+        min-height:85px;
         padding:4px;
     }}
 
-    .day-number {{
-        font-size:13px;
+    .google-date {{
+        font-size:12px;
     }}
 
-    .calendar-event {{
+    .event {{
         font-size:8px;
-        padding:2px 4px;
+        padding:1px 4px;
     }}
 }}
 
@@ -409,8 +386,6 @@ with tab1:
                     "comments": []
                 })
 
-                st.session_state.clear_wish_inputs = True
-
                 st.rerun()
 
     wishlist = [
@@ -442,140 +417,74 @@ with tab1:
                     st.session_state.edit_id = item["id"]
                     st.rerun()
 
-            if st.session_state.edit_id == item["id"]:
+            if item.get("time"):
+                st.write(f"🕒 {item['time']}")
 
-                edit_title = st.text_input(
-                    "場所",
-                    value=item.get("title", ""),
-                    key=f"edit_title_{item['id']}"
-                )
+            if item.get("url"):
+                st.markdown(f"[🔗 リンク]({item['url']})")
 
-                edit_url = st.text_input(
-                    "URL",
-                    value=item.get("url", ""),
-                    key=f"edit_url_{item['id']}"
-                )
+            if item.get("memo"):
+                st.info(item["memo"])
 
-                edit_time = st.text_input(
-                    "時間",
-                    value=item.get("time", ""),
-                    key=f"edit_time_{item['id']}"
-                )
+            comments = item.get("comments", [])
 
-                edit_memo = st.text_area(
-                    "メモ",
-                    value=item.get("memo", ""),
-                    key=f"edit_memo_{item['id']}"
-                )
+            if comments:
 
-                c1, c2, c3 = st.columns(3)
+                last_comment = comments[-1]
 
-                if c1.button(
-                    "保存",
-                    key=f"save_{item['id']}"
-                ):
+                color = last_comment.get("color", "#666")
 
-                    get_events_ref().document(item["id"]).update({
-                        "title": edit_title,
-                        "url": edit_url,
-                        "time": edit_time,
-                        "memo": edit_memo
-                    })
-
-                    st.session_state.edit_id = None
-
-                    st.rerun()
-
-                if c2.button(
-                    "キャンセル",
-                    key=f"cancel_{item['id']}"
-                ):
-
-                    st.session_state.edit_id = None
-
-                    st.rerun()
-
-                if c3.button(
-                    "削除",
-                    key=f"delete_{item['id']}"
-                ):
-
-                    get_events_ref().document(item["id"]).delete()
-
-                    st.session_state.edit_id = None
-
-                    st.rerun()
-
-            else:
-
-                if item.get("time"):
-                    st.write(f"🕒 {item['time']}")
-
-                if item.get("url"):
-                    st.markdown(f"[🔗 リンク]({item['url']})")
-
-                if item.get("memo"):
-                    st.info(item["memo"])
-
-                comments = item.get("comments", [])
-
-                if comments:
-
-                    last_comment = comments[-1]
-
-                    color = last_comment.get("color", "#666")
-
-                    st.markdown(
-                        f"""
+                st.markdown(
+                    f"""
 <div class='last-message'
 style='border-left:5px solid {color};'>
 <b>{last_comment['userName']}</b><br>
 {last_comment['text']}
 </div>
 """,
-                        unsafe_allow_html=True
-                    )
+                    unsafe_allow_html=True
+                )
 
-                with st.expander("💬 コメント"):
+            with st.expander("💬 コメント"):
 
-                    for c in comments:
+                for c in comments:
 
-                        color = c.get("color", "#666")
+                    color = c.get("color", "#666")
 
-                        st.markdown(
-                            f"""
+                    st.markdown(
+                        f"""
 <div class='comment-box'
 style='border-left:5px solid {color};'>
 <b>{c['userName']}</b><br>
 {c['text']}
 </div>
 """,
-                            unsafe_allow_html=True
-                        )
+                        unsafe_allow_html=True
+                    )
 
-                    with st.form(
-                        key=f"comment_form_{item['id']}",
-                        clear_on_submit=True
-                    ):
+                with st.form(
+                    key=f"comment_form_{item['id']}",
+                    clear_on_submit=True
+                ):
 
-                        new_comment = st.text_input("コメント")
+                    new_comment = st.text_input("コメント")
 
-                        submitted = st.form_submit_button("送信")
+                    submitted = st.form_submit_button("送信")
 
-                        if submitted and new_comment:
+                    if submitted and new_comment:
 
-                            get_events_ref().document(item["id"]).update({
-                                "comments": firestore.ArrayUnion([
-                                    {
-                                        "userName": user_name,
-                                        "text": new_comment,
-                                        "createdAt": get_jst_now().isoformat(),
-                                        "color": st.session_state.user_color
-                                    }
-                                ])
-                            })
+                        get_events_ref().document(item["id"]).update({
+                            "comments": firestore.ArrayUnion([
+                                {
+                                    "userName": user_name,
+                                    "text": new_comment,
+                                    "createdAt": get_jst_now().isoformat(),
+                                    "color": st.session_state.user_color
+                                }
+                            ])
+                        })
 
-                            st.rerun()
+                        st.rerun()
 
                 st.divider()
 
@@ -617,7 +526,7 @@ with tab2:
         with st.container(border=True):
 
             st.markdown(
-                f"## 📅 {item.get('date', '')} {item['title']}"
+                f"## 📅 {item.get('date','')} {item['title']}"
             )
 
             if item.get("time"):
@@ -650,8 +559,6 @@ with tab3:
             "reason": nr
         })
 
-        st.session_state.clear_ng_inputs = True
-
         st.rerun()
 
     st.divider()
@@ -680,26 +587,29 @@ with tab4:
 
     cal = calendar.Calendar(firstweekday=0)
 
-    month_days = list(
-        cal.monthdatescalendar(year, month)
-    )
+    month_days = cal.monthdatescalendar(year, month)
 
     week_names = [
-        "月", "火", "水",
-        "木", "金", "土", "日"
+        "月",
+        "火",
+        "水",
+        "木",
+        "金",
+        "土",
+        "日"
     ]
 
-    st.markdown(
-        "<div class='calendar-wrap'><div class='calendar-grid'>",
-        unsafe_allow_html=True
-    )
+    calendar_html = """
+<div class="google-calendar">
+"""
 
     for w in week_names:
 
-        st.markdown(
-            f"<div class='calendar-head'>{w}</div>",
-            unsafe_allow_html=True
-        )
+        calendar_html += f"""
+<div class="google-head">
+{w}
+</div>
+"""
 
     for week in month_days:
 
@@ -717,58 +627,55 @@ with tab4:
                 if n.get("date") == target
             ]
 
-            classes = []
+            classes = "google-cell"
 
             if day.month != month:
-                classes.append("other-month")
+                classes += " other"
 
             if (
                 day.day == today and
                 day.month == month
             ):
-                classes.append("today-cell")
+                classes += " today"
 
             weekday = day.weekday()
 
-            num_class = ""
+            date_class = "google-date"
 
             if weekday == 5:
-                num_class = "sat"
+                date_class += " sat"
 
             elif weekday == 6:
-                num_class = "sun"
+                date_class += " sun"
 
-            html = f"""
-<div class="calendar-cell {' '.join(classes)}">
-<div class="day-number {num_class}">
+            calendar_html += f"""
+<div class="{classes}">
+<div class="{date_class}">
 {day.day}
 </div>
 """
 
             for e in day_events[:3]:
 
-                html += f"""
-<div class="calendar-event event-normal">
-{e.get("time","")} {e["title"]}
+                calendar_html += f"""
+<div class="event">
+{e.get("time","")} {e.get("title","")}
 </div>
 """
 
             for n in day_ng[:2]:
 
-                html += f"""
-<div class="calendar-event event-ng">
+                calendar_html += f"""
+<div class="event ng">
 🚫 {n.get("time","")}
 </div>
 """
 
-            html += "</div>"
+            calendar_html += "</div>"
 
-            st.markdown(
-                html,
-                unsafe_allow_html=True
-            )
+    calendar_html += "</div>"
 
     st.markdown(
-        "</div></div>",
+        calendar_html,
         unsafe_allow_html=True
     )
