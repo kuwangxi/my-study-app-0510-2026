@@ -109,10 +109,10 @@ def load_app_settings(room_key):
             if st.session_state.user_name in st.session_state.room_user_colors:
                 st.session_state.user_color = st.session_state.room_user_colors[st.session_state.user_name]
 
-# --- 共通UI: 時間選択 ---
-def time_selector_ui(key_prefix, default_val="終日"):
+# --- 共通UI: 時間選択 (デフォルトを「カスタム」に変更) ---
+def time_selector_ui(key_prefix, default_val="カスタム"):
     options = ["終日", "午前中", "午後", "カスタム"]
-    idx = options.index(default_val) if default_val in options else 0
+    idx = options.index(default_val) if default_val in options else 3
     t_type = st.selectbox("時間指定", options, index=idx, key=f"t_type_{key_prefix}")
     if t_type == "カスタム":
         col_c1, col_c2 = st.columns(2)
@@ -132,7 +132,7 @@ st.markdown(f"""
     .cal-today {{ border: 2px solid {st.session_state.user_color} !important; background-color: #262626 !important; }}
     .cal-dot {{ font-size: 0.7em; margin-bottom: 1px; border-radius: 2px; padding: 1px 2px; line-height: 1.1; }}
     
-    /* 生理関連: 背景色を非表示、文字色のみで視認性を確保 */
+    /* 生理関連: 背景色なし、文字色のみ */
     .period-dot {{ background-color: transparent !important; color: #f43f5e; border: none !important; font-weight: bold; }}
     .ovulation-dot {{ background-color: transparent !important; color: #a855f7; border: none !important; font-weight: bold; }}
     .pms-dot {{ background-color: transparent !important; color: #eab308; border: none !important; font-weight: bold; }}
@@ -391,7 +391,6 @@ with tab3:
                 inner = f'<div class="cal-date">{day}</div>'
                 for p_type, p_label in day_periods: inner += f'<div class="cal-dot {p_type}-dot">{p_label}</div>'
                 for e in day_evs: inner += f'<div class="cal-dot" style="background-color:rgba(59,130,246,0.2); color:#60a5fa;">📍 {e["title"]}</div>'
-                # NG日の表示
                 for n in day_ngs:
                     inner += f'<div class="cal-dot ng-dot">🚫 {n.get("userName")}</div>'
                 
