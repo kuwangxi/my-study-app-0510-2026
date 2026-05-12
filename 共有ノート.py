@@ -5,9 +5,9 @@ import random
 from datetime import datetime, timedelta, timezone
 import calendar
 
-# ==========================================
+# =====================================================
 # 基本設定
-# ==========================================
+# =====================================================
 
 st.set_page_config(
     page_title="ふたりの共有ノート",
@@ -15,73 +15,62 @@ st.set_page_config(
     layout="wide"
 )
 
-# ==========================================
+# =====================================================
 # セッション状態
-# ==========================================
+# =====================================================
 
-if "font_size" not in st.session_state:
-    st.session_state.font_size = 14
+defaults = {
+    "font_size": 14,
+    "edit_id": None,
+    "user_color": "#ff4b6e",
+    "input_title": "",
+    "input_url": "",
+    "input_memo": "",
+    "input_time": "12:00",
+    "ng_reason": "",
+    "clear_wish_inputs": False,
+    "clear_ng_inputs": False,
+}
 
-if "edit_id" not in st.session_state:
-    st.session_state.edit_id = None
+for k, v in defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
-if "user_color" not in st.session_state:
-    st.session_state.user_color = "#ff4b6e"
-
-if "input_title" not in st.session_state:
-    st.session_state.input_title = ""
-
-if "input_url" not in st.session_state:
-    st.session_state.input_url = ""
-
-if "input_memo" not in st.session_state:
-    st.session_state.input_memo = ""
-
-if "ng_reason" not in st.session_state:
-    st.session_state.ng_reason = ""
-
-if "clear_wish_inputs" not in st.session_state:
-    st.session_state.clear_wish_inputs = False
-
-if "clear_ng_inputs" not in st.session_state:
-    st.session_state.clear_ng_inputs = False
-
-# ==========================================
+# =====================================================
 # 入力リセット
-# ==========================================
+# =====================================================
 
 if st.session_state.clear_wish_inputs:
     st.session_state.input_title = ""
     st.session_state.input_url = ""
     st.session_state.input_memo = ""
+    st.session_state.input_time = "12:00"
     st.session_state.clear_wish_inputs = False
 
 if st.session_state.clear_ng_inputs:
     st.session_state.ng_reason = ""
     st.session_state.clear_ng_inputs = False
 
-# ==========================================
-# 時刻関連
-# ==========================================
+# =====================================================
+# 時刻
+# =====================================================
 
 def get_jst_now():
     return datetime.now(timezone(timedelta(hours=9)))
 
-def get_weekday_jp(dt):
-    w = ['月', '火', '水', '木', '金', '土', '日']
-    return w[dt.weekday()]
-
-# ==========================================
+# =====================================================
 # Firebase
-# ==========================================
+# =====================================================
 
 if not firebase_admin._apps:
+
     cred_dict = dict(st.secrets["firebase"])
 
     if "private_key" in cred_dict:
         cred_dict["private_key"] = cred_dict["private_key"].replace("\\n", "\n")
 
     cred = credentials.Certificate(cred_dict)
+
     firebase_admin.initialize_app(cred)
 
 db = firestore.client()
@@ -115,9 +104,9 @@ def get_rooms_ref():
         .collection("secure_rooms")
     )
 
-# ==========================================
+# =====================================================
 # ログイン保持
-# ==========================================
+# =====================================================
 
 if "is_logged" not in st.session_state:
 
@@ -132,6 +121,7 @@ if "is_logged" not in st.session_state:
         st.session_state.is_logged = False
 
 def login_action(room, user):
+
     st.session_state.room_key = room
     st.session_state.user_name = user
     st.session_state.is_logged = True
@@ -140,79 +130,94 @@ def login_action(room, user):
     st.query_params["user"] = user
 
 def logout():
+
     st.session_state.is_logged = False
+
     st.query_params.clear()
+
     st.rerun()
 
-# ==========================================
+# =====================================================
 # CSS
-# ==========================================
+# =====================================================
 
 st.markdown(
     f"""
 <style>
 
 html, body, [class*="st-"] {{
-    font-size: {st.session_state.font_size}px !important;
+    font-size:{st.session_state.font_size}px !important;
 }}
 
 .calendar-grid {{
     display:grid;
-    grid-template-columns:repeat(7,1fr);
-    gap:4px;
-}}
-
-.calendar-cell {{
-    min-height:90px;
-    border:1px solid #333;
-    border-radius:10px;
-    padding:6px;
-    background:#111;
-    overflow:hidden;
+    grid-template-columns:repeat(7, 1fr);
+    gap:6px;
 }}
 
 .calendar-head {{
     text-align:center;
     font-weight:bold;
-    padding:6px;
+    padding:10px;
+    background:#202020;
+    border-radius:10px;
+}}
+
+.calendar-cell {{
+    min-height:120px;
+    border:1px solid #333;
+    border-radius:12px;
+    padding:8px;
+    background:#111;
 }}
 
 .today-cell {{
-    background:#3b0d17;
     border:2px solid #ff4b6e;
+    background:#2b1015;
 }}
 
 .day-number {{
+    font-size:18px;
     font-weight:bold;
-    margin-bottom:4px;
+    margin-bottom:8px;
 }}
 
 .event-dot {{
-    font-size:11px;
+    font-size:12px;
     background:#222;
-    border-radius:6px;
-    padding:2px 4px;
-    margin-bottom:3px;
+    border-radius:8px;
+    padding:3px 6px;
+    margin-bottom:4px;
+    overflow:hidden;
 }}
 
 .last-message {{
     background:#1f1f1f;
-    border-radius:8px;
-    padding:6px;
-    margin-top:6px;
+    border-radius:10px;
+    padding:8px;
+    margin-top:8px;
+}}
+
+.comment-box {{
+    padding:8px;
+    border-radius:10px;
+    margin-bottom:8px;
+    background:#1a1a1a;
 }}
 
 @media (max-width:768px) {{
 
     .calendar-cell {{
-        min-height:65px;
-        padding:3px;
-        font-size:10px;
+        min-height:90px;
+        padding:4px;
     }}
 
     .event-dot {{
         font-size:9px;
-        padding:1px 2px;
+    }}
+
+    .day-number {{
+        font-size:14px;
     }}
 }}
 
@@ -221,9 +226,9 @@ html, body, [class*="st-"] {{
     unsafe_allow_html=True
 )
 
-# ==========================================
+# =====================================================
 # サイドバー
-# ==========================================
+# =====================================================
 
 if st.session_state.get("is_logged"):
 
@@ -257,9 +262,9 @@ if st.session_state.get("is_logged"):
     if st.sidebar.button("ログアウト"):
         logout()
 
-# ==========================================
+# =====================================================
 # ログイン画面
-# ==========================================
+# =====================================================
 
 if not st.session_state.get("is_logged"):
 
@@ -307,9 +312,9 @@ if not st.session_state.get("is_logged"):
 
     st.stop()
 
-# ==========================================
+# =====================================================
 # データ取得
-# ==========================================
+# =====================================================
 
 room_key = st.session_state.room_key
 user_name = st.session_state.user_name
@@ -328,9 +333,9 @@ ng_dates = [
     .stream()
 ]
 
-# ==========================================
+# =====================================================
 # タブ
-# ==========================================
+# =====================================================
 
 tab1, tab2, tab3, tab4 = st.tabs([
     "📍 行きたい",
@@ -339,18 +344,20 @@ tab1, tab2, tab3, tab4 = st.tabs([
     "🗓️ カレンダー"
 ])
 
-# ==========================================
+# =====================================================
 # 行きたい
-# ==========================================
+# =====================================================
 
 with tab1:
-
-    st.subheader("📍 行きたい場所")
 
     with st.expander("＋追加"):
 
         t = st.text_input("場所", key="input_title")
+
         u = st.text_input("URL", key="input_url")
+
+        tm = st.time_input("時間")
+
         m = st.text_area("メモ", key="input_memo")
 
         if st.button("追加", type="primary"):
@@ -362,6 +369,7 @@ with tab1:
                     "title": t,
                     "url": u,
                     "memo": m,
+                    "time": tm.strftime("%H:%M"),
                     "status": "wishlist",
                     "userName": user_name,
                     "createdAt": get_jst_now().isoformat(),
@@ -377,11 +385,20 @@ with tab1:
         if e.get("status") == "wishlist"
     ]
 
+    wishlist = sorted(
+        wishlist,
+        key=lambda x: x.get("createdAt", ""),
+        reverse=True
+    )
+
     for item in wishlist:
 
         with st.container(border=True):
 
-            st.markdown(f"### {item['title']}")
+            st.markdown(f"## 📍 {item['title']}")
+
+            if item.get("time"):
+                st.write(f"🕒 {item['time']}")
 
             if item.get("url"):
                 st.markdown(f"[🔗 リンク]({item['url']})")
@@ -389,13 +406,90 @@ with tab1:
             if item.get("memo"):
                 st.info(item["memo"])
 
-# ==========================================
+            comments = item.get("comments", [])
+
+            if comments:
+
+                last_comment = comments[-1]
+
+                color = last_comment.get("color", "#666")
+
+                st.markdown(
+                    f"""
+<div class='last-message'
+style='border-left:5px solid {color};'>
+<b>{last_comment['userName']}</b><br>
+{last_comment['text']}
+</div>
+""",
+                    unsafe_allow_html=True
+                )
+
+            with st.expander("💬 コメント"):
+
+                for c in comments:
+
+                    color = c.get("color", "#666")
+
+                    st.markdown(
+                        f"""
+<div class='comment-box'
+style='border-left:5px solid {color};'>
+<b>{c['userName']}</b><br>
+{c['text']}
+</div>
+""",
+                        unsafe_allow_html=True
+                    )
+
+                with st.form(
+                    key=f"comment_form_{item['id']}",
+                    clear_on_submit=True
+                ):
+
+                    new_comment = st.text_input("コメント")
+
+                    submitted = st.form_submit_button("送信")
+
+                    if submitted and new_comment:
+
+                        get_events_ref().document(item["id"]).update({
+                            "comments": firestore.ArrayUnion([
+                                {
+                                    "userName": user_name,
+                                    "text": new_comment,
+                                    "createdAt": get_jst_now().isoformat(),
+                                    "color": st.session_state.user_color
+                                }
+                            ])
+                        })
+
+                        st.rerun()
+
+            st.divider()
+
+            fix_date = st.date_input(
+                "予定日",
+                key=f"fix_date_{item['id']}"
+            )
+
+            if st.button(
+                "📅 予定に追加",
+                key=f"fix_btn_{item['id']}"
+            ):
+
+                get_events_ref().document(item["id"]).update({
+                    "status": "scheduled",
+                    "date": str(fix_date)
+                })
+
+                st.rerun()
+
+# =====================================================
 # 予定
-# ==========================================
+# =====================================================
 
 with tab2:
-
-    st.subheader("📅 予定")
 
     scheduled = [
         e for e in events
@@ -404,7 +498,7 @@ with tab2:
 
     scheduled = sorted(
         scheduled,
-        key=lambda x: x.get("date", "9999")
+        key=lambda x: x.get("date", "")
     )
 
     for item in scheduled:
@@ -412,12 +506,18 @@ with tab2:
         with st.container(border=True):
 
             st.markdown(
-                f"### 📅 {item.get('date', '')} {item['title']}"
+                f"## 📅 {item.get('date', '')} {item['title']}"
             )
 
-# ==========================================
+            if item.get("time"):
+                st.write(f"🕒 {item['time']}")
+
+            if item.get("memo"):
+                st.info(item["memo"])
+
+# =====================================================
 # NG日
-# ==========================================
+# =====================================================
 
 with tab3:
 
@@ -425,10 +525,7 @@ with tab3:
 
     nd = st.date_input("行けない日")
 
-    nr = st.text_input(
-        "理由",
-        key="ng_reason"
-    )
+    nr = st.text_input("理由", key="ng_reason")
 
     if st.button("NG登録"):
 
@@ -450,12 +547,12 @@ with tab3:
         with st.container(border=True):
 
             st.write(
-                f"🚫 {n['date']} {n.get('reason', '')}"
+                f"🚫 {n['date']}  {n.get('reason', '')}"
             )
 
-# ==========================================
+# =====================================================
 # カレンダー
-# ==========================================
+# =====================================================
 
 with tab4:
 
@@ -469,7 +566,7 @@ with tab4:
 
     cal = calendar.monthcalendar(year, month)
 
-    week_names = ['月', '火', '水', '木', '金', '土', '日']
+    week_names = ["月", "火", "水", "木", "金", "土", "日"]
 
     st.markdown(
         "<div class='calendar-grid'>",
@@ -514,23 +611,26 @@ with tab4:
                     else ""
                 )
 
-                html = f"<div class='calendar-cell {extra_class}'>"
-
-                html += f"<div class='day-number'>{day}</div>"
+                html = f"""
+<div class='calendar-cell {extra_class}'>
+<div class='day-number'>{day}</div>
+"""
 
                 for e in day_events[:3]:
-                    html += (
-                        f"<div class='event-dot'>"
-                        f"📍 {e['title'][:8]}"
-                        f"</div>"
-                    )
+
+                    html += f"""
+<div class='event-dot'>
+📍 {e['title'][:10]}
+</div>
+"""
 
                 for n in day_ng[:2]:
-                    html += (
-                        f"<div class='event-dot'>"
-                        f"🚫 NG"
-                        f"</div>"
-                    )
+
+                    html += f"""
+<div class='event-dot'>
+🚫 NG
+</div>
+"""
 
                 html += "</div>"
 
