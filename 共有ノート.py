@@ -87,7 +87,7 @@ def load_app_settings(room_key):
 # --- 共通UI: 時間選択 ---
 def time_selector_ui(key_prefix, default_val="終日"):
     options = ["終日", "午前中", "午後", "カスタム"]
-    idx = options.index(default_val) if default_val in options else 3
+    idx = options.index(default_val) if default_val in options else 0
     t_type = st.selectbox("時間指定", options, index=idx, key=f"t_type_{key_prefix}")
     if t_type == "カスタム":
         col_c1, col_c2 = st.columns(2)
@@ -100,14 +100,36 @@ def time_selector_ui(key_prefix, default_val="終日"):
 st.markdown(f"""
 <style>
     html, body, [class*="st-"] {{ font-size: {st.session_state.font_size}px !important; }}
-    .past-item {{ color: #9e9e9e; }}
-    .cal-box {{
-        border: 1px solid #333; border-radius: 4px; padding: 5px; height: 110px;
-        background-color: #1a1a1a; position: relative; overflow-y: auto;
+    
+    /* カレンダーグリッド（モバイルでも7列維持） */
+    .cal-grid {{
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+        width: 100%;
+        margin-top: 10px;
     }}
-    .cal-date {{ font-size: 0.85em; font-weight: bold; margin-bottom: 2px; }}
+    .cal-header-item {{
+        text-align: center;
+        font-weight: bold;
+        font-size: 0.8em;
+        padding: 5px 0;
+        background-color: #262626;
+        border-radius: 4px;
+    }}
+    .cal-box {{
+        border: 1px solid #333;
+        border-radius: 4px;
+        padding: 4px;
+        min-height: 80px;
+        background-color: #1a1a1a;
+        position: relative;
+        overflow-y: auto;
+    }}
+    .cal-date {{ font-size: 0.8em; font-weight: bold; margin-bottom: 2px; }}
     .cal-today {{ border: 2px solid {st.session_state.user_color} !important; background-color: #262626 !important; }}
-    .cal-dot {{ font-size: 0.7em; margin-bottom: 1px; border-radius: 2px; padding: 0 2px; }}
+    .cal-dot {{ font-size: 0.7em; margin-bottom: 1px; border-radius: 2px; padding: 1px 2px; line-height: 1.1; }}
+    
     .last-comment {{
         font-size: 0.85em; border-left: 4px solid; padding-left: 10px; margin-top: 10px; margin-bottom: 10px; line-height: 1.4;
     }}
@@ -222,7 +244,6 @@ with tab1:
     for item in wish_items:
         with st.container(border=True):
             if st.session_state.edit_id == item["id"]:
-                # --- 編集モード ---
                 et = st.text_input("タイトル", item["title"], key=f"et_{item['id']}")
                 eu = st.text_input("URL", item.get("url",""), key=f"eu_{item['id']}")
                 em = st.text_area("メモ", item.get("memo",""), key=f"em_{item['id']}")
@@ -237,16 +258,13 @@ with tab1:
                     get_events_ref().document(item["id"]).delete()
                     st.session_state.edit_id = None; st.rerun()
             else:
-                # --- 通常モード ---
                 c1, c2 = st.columns([5,1])
                 time_disp = f"<span class='time-badge'>⏰ {item.get('time')}</span> " if item.get("time") else ""
                 c1.markdown(f"### {time_disp}{item['title']}", unsafe_allow_html=True)
                 if c2.button("📝", key=f"ed_{item['id']}"): st.session_state.edit_id = item["id"]; st.rerun()
-                
                 if item.get("url"): st.link_button("🔗 リンク", item["url"])
                 if item.get("memo"): st.info(item["memo"])
                 render_thread_info(item)
-                
                 with st.expander("💬 相談・日程確定"):
                     for c in sorted(item.get("comments", []), key=lambda x: x.get('createdAt', '')):
                         u_clr = st.session_state.room_user_colors.get(c['userName'], "#999999")
@@ -270,7 +288,6 @@ with tab2:
         is_past = item["date"] < str(today_jst)
         with st.container(border=True):
             if st.session_state.edit_id == item["id"]:
-                # --- 編集モード ---
                 edat = st.date_input("日付変更", value=datetime.strptime(item["date"], "%Y-%m-%d").date(), key=f"edat_{item['id']}")
                 etit = st.text_input("タイトル変更", item["title"], key=f"etit_{item['id']}")
                 etim = st.text_input("時間変更", item.get("time","") or "", key=f"etim_{item['id']}")
@@ -284,7 +301,6 @@ with tab2:
                     get_events_ref().document(item["id"]).delete()
                     st.session_state.edit_id = None; st.rerun()
             else:
-                # --- 通常モード ---
                 c1, c2 = st.columns([5,1])
                 dt_obj = datetime.strptime(item["date"], "%Y-%m-%d")
                 time_str = f" {item['time']}" if item.get("time") else ""
@@ -296,7 +312,7 @@ with tab2:
                     get_events_ref().document(item["id"]).update({"status":"wishlist", "date":None})
                     st.rerun()
 
-# --- タブ3: カレンダー ---
+# --- タブ3: カレンダー (モバイル対応グリッド版) ---
 with tab3:
     cm1, cm2, cm3 = st.columns([1, 2, 1])
     if cm1.button("◀ 前月"):
@@ -305,28 +321,39 @@ with tab3:
     if cm3.button("次月 ▶"):
         st.session_state.current_month = (st.session_state.current_month + timedelta(days=32)).replace(day=1); st.rerun()
 
-    cal = calendar.Calendar(firstweekday=0)
-    month_days = cal.monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
-    cols = st.columns(7)
-    for i, w in enumerate(["月", "火", "水", "木", "金", "土", "日"]): cols[i].markdown(f"<center><b>{w}</b></center>", unsafe_allow_html=True)
+    # カレンダーHTML構築
+    cal_html = '<div class="cal-grid">'
+    # 曜日ヘッダー
+    for w in ["月", "火", "水", "木", "金", "土", "日"]:
+        cal_html += f'<div class="cal-header-item">{w}</div>'
+    
+    cal_obj = calendar.Calendar(firstweekday=0)
+    month_days = cal_obj.monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
+    
     for week in month_days:
-        cols = st.columns(7)
-        for i, day in enumerate(week):
-            if day == 0: cols[i].write(""); continue
-            this_date = st.session_state.current_month.replace(day=day)
-            date_str = str(this_date)
-            is_today = (this_date == today_jst)
-            day_evs = [e for e in events if e.get("date") == date_str]
-            day_ngs = [n for n in ng_dates if n.get("date") == date_str]
-            with cols[i]:
-                bg = "cal-today" if is_today else ""
-                html = f'<div class="cal-box {bg}"><div class="cal-date">{day}</div>'
-                for e in day_evs: html += f'<div class="cal-dot" style="background-color:rgba(59,130,246,0.2); color:#60a5fa;">📍 {e["title"]}</div>'
+        for day in week:
+            if day == 0:
+                cal_html += '<div style="background:transparent;"></div>'
+            else:
+                this_date = st.session_state.current_month.replace(day=day)
+                date_str = str(this_date)
+                is_today = (this_date == today_jst)
+                bg_class = "cal-today" if is_today else ""
+                
+                day_evs = [e for e in events if e.get("date") == date_str]
+                day_ngs = [n for n in ng_dates if n.get("date") == date_str]
+                
+                inner_content = f'<div class="cal-date">{day}</div>'
+                for e in day_evs:
+                    inner_content += f'<div class="cal-dot" style="background-color:rgba(59,130,246,0.2); color:#60a5fa;">📍 {e["title"]}</div>'
                 for n in day_ngs:
                     u_clr = st.session_state.room_user_colors.get(n.get("userName"), "#f43f5e")
-                    html += f'<div class="cal-dot" style="background-color:{u_clr}33; color:{u_clr}; border-left: 2px solid {u_clr};">🚫 {n.get("userName")}</div>'
-                html += '</div>'
-                st.markdown(html, unsafe_allow_html=True)
+                    inner_content += f'<div class="cal-dot" style="background-color:{u_clr}33; color:{u_clr}; border-left: 2px solid {u_clr};">🚫 {n.get("userName")}</div>'
+                
+                cal_html += f'<div class="cal-box {bg_class}">{inner_content}</div>'
+    
+    cal_html += '</div>'
+    st.markdown(cal_html, unsafe_allow_html=True)
 
 # --- タブ4: NG日 ---
 with tab4:
