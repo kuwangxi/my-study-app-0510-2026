@@ -18,7 +18,6 @@ if "edit_id" not in st.session_state: st.session_state.edit_id = None
 if "current_month" not in st.session_state: st.session_state.current_month = datetime.now(timezone(timedelta(hours=9))).date().replace(day=1)
 if "user_color" not in st.session_state: st.session_state.user_color = "#f43f5e" 
 if "room_user_colors" not in st.session_state: st.session_state.room_user_colors = {}
-# 並べ替えのデフォルト設定
 if "sort_option" not in st.session_state: st.session_state.sort_option = "コメント最新順"
 
 # 入力リセット用
@@ -86,8 +85,10 @@ def load_app_settings(room_key):
                 st.session_state.user_color = st.session_state.room_user_colors[st.session_state.user_name]
 
 # --- 共通UI: 時間選択 ---
-def time_selector_ui(key_prefix):
-    t_type = st.selectbox("時間指定", ["終日", "午前中", "午後", "カスタム"], key=f"t_type_{key_prefix}")
+def time_selector_ui(key_prefix, default_val="終日"):
+    options = ["終日", "午前中", "午後", "カスタム"]
+    idx = options.index(default_val) if default_val in options else 3
+    t_type = st.selectbox("時間指定", options, index=idx, key=f"t_type_{key_prefix}")
     if t_type == "カスタム":
         col_c1, col_c2 = st.columns(2)
         t_start = col_c1.time_input("開始", value=get_jst_now().time(), key=f"t_start_{key_prefix}")
@@ -169,15 +170,11 @@ events = [{"id": d.id, **d.to_dict()} for d in get_events_ref().where("roomKey",
 ng_dates = [{"id": d.id, **d.to_dict()} for d in get_ng_ref().where("roomKey", "==", room_key).stream()]
 today_jst = get_jst_now().date()
 
-# --- 共通部品: 最終コメント/アクティビティ情報 ---
 def get_latest_activity_time(item):
-    """スレッドの最終更新日時（コメントまたは作成時）を返す"""
     comments = item.get("comments", [])
     if comments:
-        # コメントの中で一番新しい時間を取得
-        last_c = max([c.get('createdAt', '') for c in comments])
-        return last_c
-    return item.get('createdAt', '') # コメントがなければ作成日時
+        return max([c.get('createdAt', '') for c in comments])
+    return item.get('createdAt', '')
 
 def render_thread_info(item):
     comments = item.get("comments", [])
@@ -189,12 +186,10 @@ def render_thread_info(item):
     else:
         st.caption("やり取りはまだありません（新着）")
 
-# --- タブ ---
 tab1, tab2, tab3, tab4 = st.tabs(["📍 行きたい", "📅 予定一覧", "🗓️ カレンダー", "🚫 NG日"])
 
 # --- タブ1: 行きたい ---
 with tab1:
-    # 1. 並べ替え設定
     col_sort1, col_sort2 = st.columns([2, 1])
     with col_sort2:
         new_sort = st.selectbox("並べ替え", ["コメント最新順", "追加順（新しい順）", "追加順（古い順）"], index=["コメント最新順", "追加順（新しい順）", "追加順（古い順）"].index(st.session_state.sort_option))
@@ -202,7 +197,6 @@ with tab1:
             st.session_state.sort_option = new_sort
             save_app_settings(); st.rerun()
 
-    # 2. 追加フォーム
     with st.expander("＋ 新しい「行きたい場所」を追加"):
         t = st.text_input("場所/内容", key="input_title")
         u = st.text_input("URL", key="input_url")
@@ -217,43 +211,57 @@ with tab1:
                 })
                 st.session_state.clear_wish_inputs = True; st.rerun()
 
-    # 3. リスト表示 (ソート適用)
     wish_items = [e for e in events if e.get("status") == "wishlist"]
     if st.session_state.sort_option == "コメント最新順":
         wish_items = sorted(wish_items, key=get_latest_activity_time, reverse=True)
     elif st.session_state.sort_option == "追加順（新しい順）":
         wish_items = sorted(wish_items, key=lambda x: x.get('createdAt', ''), reverse=True)
-    else: # 古い順
+    else:
         wish_items = sorted(wish_items, key=lambda x: x.get('createdAt', ''))
 
     for item in wish_items:
         with st.container(border=True):
-            c1, c2 = st.columns([5,1])
-            time_disp = f"<span class='time-badge'>⏰ {item['time']}</span> " if item.get("time") else ""
-            c1.markdown(f"### {time_disp}{item['title']}", unsafe_allow_html=True)
-            if c2.button("📝", key=f"ed_{item['id']}"): st.session_state.edit_id = item["id"]; st.rerun()
-            
-            if item.get("url"): st.link_button("🔗 リンク", item["url"])
-            if item.get("memo"): st.info(item["memo"])
-            
-            render_thread_info(item)
-            
-            with st.expander("💬 相談・日程確定"):
-                for c in sorted(item.get("comments", []), key=lambda x: x.get('createdAt', '')):
-                    u_clr = st.session_state.room_user_colors.get(c['userName'], "#999999")
-                    st.markdown(f"<b style='color:{u_clr}'>{c['userName']}</b>: {c['text']}", unsafe_allow_html=True)
+            if st.session_state.edit_id == item["id"]:
+                # --- 編集モード ---
+                et = st.text_input("タイトル", item["title"], key=f"et_{item['id']}")
+                eu = st.text_input("URL", item.get("url",""), key=f"eu_{item['id']}")
+                em = st.text_area("メモ", item.get("memo",""), key=f"em_{item['id']}")
+                eti = st.text_input("時間 (自由入力)", item.get("time","") or "", key=f"eti_{item['id']}")
+                ec1, ec2, ec3 = st.columns(3)
+                if ec1.button("保存", key=f"sv_{item['id']}", type="primary", use_container_width=True):
+                    get_events_ref().document(item["id"]).update({"title":et, "url":eu, "memo":em, "time":eti})
+                    st.session_state.edit_id = None; st.rerun()
+                if ec2.button("キャンセル", key=f"cn_{item['id']}", use_container_width=True):
+                    st.session_state.edit_id = None; st.rerun()
+                if ec3.button("削除", key=f"dl_{item['id']}", use_container_width=True):
+                    get_events_ref().document(item["id"]).delete()
+                    st.session_state.edit_id = None; st.rerun()
+            else:
+                # --- 通常モード ---
+                c1, c2 = st.columns([5,1])
+                time_disp = f"<span class='time-badge'>⏰ {item.get('time')}</span> " if item.get("time") else ""
+                c1.markdown(f"### {time_disp}{item['title']}", unsafe_allow_html=True)
+                if c2.button("📝", key=f"ed_{item['id']}"): st.session_state.edit_id = item["id"]; st.rerun()
                 
-                with st.form(key=f"f_{item['id']}", clear_on_submit=True):
-                    msg = st.text_input("メッセージ")
-                    if st.form_submit_button("送信") and msg:
-                        get_events_ref().document(item["id"]).update({"comments": firestore.ArrayUnion([{"userName": user_name, "text": msg, "createdAt": get_jst_now().isoformat()}])})
+                if item.get("url"): st.link_button("🔗 リンク", item["url"])
+                if item.get("memo"): st.info(item["memo"])
+                render_thread_info(item)
+                
+                with st.expander("💬 相談・日程確定"):
+                    for c in sorted(item.get("comments", []), key=lambda x: x.get('createdAt', '')):
+                        u_clr = st.session_state.room_user_colors.get(c['userName'], "#999999")
+                        st.markdown(f"<b style='color:{u_clr}'>{c['userName']}</b>: {c['text']}", unsafe_allow_html=True)
+                    with st.form(key=f"f_{item['id']}", clear_on_submit=True):
+                        msg = st.text_input("メッセージ")
+                        if st.form_submit_button("送信") and msg:
+                            get_events_ref().document(item["id"]).update({"comments": firestore.ArrayUnion([{"userName": user_name, "text": msg, "createdAt": get_jst_now().isoformat()}])})
+                            st.rerun()
+                    st.divider()
+                    sd = st.date_input("確定日", value=today_jst, key=f"sd_{item['id']}")
+                    st_time = time_selector_ui(f"fix_{item['id']}")
+                    if st.button("この日で確定する", key=f"fix_btn_{item['id']}", use_container_width=True):
+                        get_events_ref().document(item['id']).update({"status": "scheduled", "date": str(sd), "time": st_time})
                         st.rerun()
-                st.divider()
-                sd = st.date_input("確定日", value=today_jst, key=f"sd_{item['id']}")
-                st_time = time_selector_ui(f"fix_{item['id']}")
-                if st.button("この日で確定する", key=f"fix_btn_{item['id']}", use_container_width=True):
-                    get_events_ref().document(item['id']).update({"status": "scheduled", "date": str(sd), "time": st_time})
-                    st.rerun()
 
 # --- タブ2: 予定一覧 ---
 with tab2:
@@ -261,13 +269,32 @@ with tab2:
     for item in sched_items:
         is_past = item["date"] < str(today_jst)
         with st.container(border=True):
-            c1, c2 = st.columns([5,1])
-            dt_obj = datetime.strptime(item["date"], "%Y-%m-%d")
-            time_str = f" {item['time']}" if item.get("time") else ""
-            c1.markdown(f"#### {'⌛' if is_past else '📅'} {item['date']}({get_weekday_jp(dt_obj)}){time_str}")
-            c1.markdown(f"**{item['title']}**")
-            if c2.button("📝", key=f"ed_s_{item['id']}"): st.session_state.edit_id = item["id"]; st.rerun()
-            render_thread_info(item)
+            if st.session_state.edit_id == item["id"]:
+                # --- 編集モード ---
+                edat = st.date_input("日付変更", value=datetime.strptime(item["date"], "%Y-%m-%d").date(), key=f"edat_{item['id']}")
+                etit = st.text_input("タイトル変更", item["title"], key=f"etit_{item['id']}")
+                etim = st.text_input("時間変更", item.get("time","") or "", key=f"etim_{item['id']}")
+                ec1, ec2, ec3 = st.columns(3)
+                if ec1.button("保存", key=f"svs_{item['id']}", type="primary", use_container_width=True):
+                    get_events_ref().document(item["id"]).update({"date":str(edat), "title":etit, "time":etim})
+                    st.session_state.edit_id = None; st.rerun()
+                if ec2.button("キャンセル", key=f"cns_{item['id']}", use_container_width=True):
+                    st.session_state.edit_id = None; st.rerun()
+                if ec3.button("削除", key=f"dls_{item['id']}", use_container_width=True):
+                    get_events_ref().document(item["id"]).delete()
+                    st.session_state.edit_id = None; st.rerun()
+            else:
+                # --- 通常モード ---
+                c1, c2 = st.columns([5,1])
+                dt_obj = datetime.strptime(item["date"], "%Y-%m-%d")
+                time_str = f" {item['time']}" if item.get("time") else ""
+                c1.markdown(f"#### {'⌛' if is_past else '📅'} {item['date']}({get_weekday_jp(dt_obj)}){time_str}")
+                c1.markdown(f"**{item['title']}**")
+                if c2.button("📝", key=f"ed_s_{item['id']}"): st.session_state.edit_id = item["id"]; st.rerun()
+                render_thread_info(item)
+                if st.button("「行きたい」に戻す", key=f"rev_{item['id']}"):
+                    get_events_ref().document(item["id"]).update({"status":"wishlist", "date":None})
+                    st.rerun()
 
 # --- タブ3: カレンダー ---
 with tab3:
@@ -280,10 +307,8 @@ with tab3:
 
     cal = calendar.Calendar(firstweekday=0)
     month_days = cal.monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
-    
     cols = st.columns(7)
     for i, w in enumerate(["月", "火", "水", "木", "金", "土", "日"]): cols[i].markdown(f"<center><b>{w}</b></center>", unsafe_allow_html=True)
-
     for week in month_days:
         cols = st.columns(7)
         for i, day in enumerate(week):
