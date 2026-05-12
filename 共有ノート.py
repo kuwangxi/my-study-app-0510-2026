@@ -240,7 +240,7 @@ def time_selector_ui(key_prefix):
     return None if t_type == "指定なし" else t_type
 
 # ==========================================
-# URLログイン保持復元
+# URLログイン保持
 # ==========================================
 
 if not st.session_state.is_logged:
@@ -362,12 +362,6 @@ with st.sidebar:
         f"ルーム : {st.session_state.room_key}"
     )
 
-    st.color_picker(
-        "自分の色",
-        st.session_state.user_color,
-        disabled=True
-    )
-
 # ==========================================
 # データ取得
 # ==========================================
@@ -466,8 +460,6 @@ with tab1:
 
     ]
 
-    # 活発順
-
     def get_last_activity(item):
 
         comments = item.get("comments", [])
@@ -504,7 +496,7 @@ with tab1:
 
         with st.container(border=True):
 
-            c1, c2 = st.columns([8,1])
+            c1, c2 = st.columns([7,1])
 
             time_html = ""
 
@@ -531,6 +523,83 @@ with tab1:
                 unsafe_allow_html=True
             )
 
+            # 編集ボタン復元
+
+            if c2.button(
+                "📝",
+                key=f"edit_{item['id']}"
+            ):
+
+                st.session_state.edit_id = item["id"]
+                st.rerun()
+
+            # 編集モード
+
+            if st.session_state.edit_id == item["id"]:
+
+                st.divider()
+
+                new_title = st.text_input(
+                    "タイトル",
+                    value=item.get("title", ""),
+                    key=f"title_{item['id']}"
+                )
+
+                new_url = st.text_input(
+                    "URL",
+                    value=item.get("url", ""),
+                    key=f"url_{item['id']}"
+                )
+
+                new_memo = st.text_area(
+                    "メモ",
+                    value=item.get("memo", ""),
+                    key=f"memo_{item['id']}"
+                )
+
+                col_a, col_b, col_c = st.columns(3)
+
+                if col_a.button(
+                    "保存",
+                    key=f"save_{item['id']}",
+                    use_container_width=True
+                ):
+
+                    get_events_ref().document(
+                        item["id"]
+                    ).update({
+
+                        "title": new_title,
+                        "url": new_url,
+                        "memo": new_memo
+
+                    })
+
+                    st.session_state.edit_id = None
+                    st.rerun()
+
+                if col_b.button(
+                    "キャンセル",
+                    key=f"cancel_{item['id']}",
+                    use_container_width=True
+                ):
+
+                    st.session_state.edit_id = None
+                    st.rerun()
+
+                if col_c.button(
+                    "削除",
+                    key=f"delete_{item['id']}",
+                    use_container_width=True
+                ):
+
+                    get_events_ref().document(
+                        item["id"]
+                    ).delete()
+
+                    st.session_state.edit_id = None
+                    st.rerun()
+
             if item.get("url"):
 
                 st.markdown(
@@ -541,7 +610,7 @@ with tab1:
 
                 st.info(item["memo"])
 
-            # 最新2件表示
+            # 最新2件
 
             if last_two:
 
