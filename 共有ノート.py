@@ -16,22 +16,20 @@ if "show_summary" not in st.session_state: st.session_state.show_summary = True
 if "hide_empty_days" not in st.session_state: st.session_state.hide_empty_days = True
 if "edit_id" not in st.session_state: st.session_state.edit_id = None
 if "current_month" not in st.session_state: st.session_state.current_month = datetime.now(timezone(timedelta(hours=9))).date().replace(day=1)
-if "user_color" not in st.session_state: st.session_state.user_color = "#f43f5e" # デフォルト色
+if "user_color" not in st.session_state: st.session_state.user_color = "#f43f5e" 
 if "room_user_colors" not in st.session_state: st.session_state.room_user_colors = {}
+# 並べ替えのデフォルト設定
+if "sort_option" not in st.session_state: st.session_state.sort_option = "コメント最新順"
 
-# テキスト入力リセット用
+# 入力リセット用
 if "input_title" not in st.session_state: st.session_state.input_title = ""
 if "input_url" not in st.session_state: st.session_state.input_url = ""
 if "input_memo" not in st.session_state: st.session_state.input_memo = ""
-if "ng_reason" not in st.session_state: st.session_state.ng_reason = ""
 if "clear_wish_inputs" not in st.session_state: st.session_state.clear_wish_inputs = False
-if "clear_ng_inputs" not in st.session_state: st.session_state.clear_ng_inputs = False
 
 if st.session_state.clear_wish_inputs:
     st.session_state.input_title = ""; st.session_state.input_url = ""; st.session_state.input_memo = ""
     st.session_state.clear_wish_inputs = False
-if st.session_state.clear_ng_inputs:
-    st.session_state.ng_reason = ""; st.session_state.clear_ng_inputs = False
 
 def get_jst_now():
     return datetime.now(timezone(timedelta(hours=9)))
@@ -61,16 +59,15 @@ def get_rooms_ref(): return db.collection('artifacts').document(APP_ID).collecti
 # --- 設定の保存・読込 ---
 def save_app_settings():
     if st.session_state.get("room_key"):
-        # ユーザーごとの色設定を保存するための辞書を更新
         colors = st.session_state.room_user_colors
         colors[st.session_state.user_name] = st.session_state.user_color
-        
         get_rooms_ref().document(st.session_state.room_key).set({
             "settings": {
                 "font_size": st.session_state.font_size,
                 "show_summary": st.session_state.show_summary,
                 "hide_empty_days": st.session_state.hide_empty_days,
-                "user_colors": colors
+                "user_colors": colors,
+                "sort_option": st.session_state.sort_option
             }
         }, merge=True)
 
@@ -84,7 +81,7 @@ def load_app_settings(room_key):
             st.session_state.show_summary = s.get("show_summary", True)
             st.session_state.hide_empty_days = s.get("hide_empty_days", True)
             st.session_state.room_user_colors = s.get("user_colors", {})
-            # 自分の色を復元
+            st.session_state.sort_option = s.get("sort_option", "コメント最新順")
             if st.session_state.user_name in st.session_state.room_user_colors:
                 st.session_state.user_color = st.session_state.room_user_colors[st.session_state.user_name]
 
@@ -118,7 +115,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. セッション管理 & ログイン
+# 2. ログイン処理
 # ==========================================
 if "is_logged" not in st.session_state:
     q_room, q_user = st.query_params.get("room"), st.query_params.get("user")
@@ -132,43 +129,35 @@ def login_action(room, user):
     st.query_params["room"], st.query_params["user"] = room, user
     load_app_settings(room)
 
-def logout():
-    st.session_state.is_logged = False; st.query_params.clear(); st.rerun()
-
-# --- サイドバー設定 ---
 if st.session_state.get("is_logged"):
     st.sidebar.title("🎨 ユーザー設定")
     picked_color = st.sidebar.color_picker("あなたのテーマカラー", value=st.session_state.user_color)
     if picked_color != st.session_state.user_color:
         st.session_state.user_color = picked_color
-        save_app_settings()
-        st.rerun()
+        save_app_settings(); st.rerun()
     
     st.sidebar.divider()
     st.sidebar.title("⚙️ アプリ設定")
     st.session_state.font_size = st.sidebar.slider("文字サイズ", 10, 24, value=st.session_state.font_size)
-    if st.sidebar.button("設定を保存", use_container_width=True): 
-        save_app_settings()
-        st.rerun()
+    if st.sidebar.button("設定を保存", use_container_width=True): save_app_settings(); st.rerun()
     
     st.sidebar.divider()
-    st.sidebar.caption(f"User: {st.session_state.user_name}")
-    if st.sidebar.button("ログアウト", use_container_width=True): logout()
+    if st.sidebar.button("ログアウト", use_container_width=True): 
+        st.session_state.is_logged = False; st.query_params.clear(); st.rerun()
 
-# ログイン画面
 if not st.session_state.get("is_logged"):
     st.markdown("<h1 style='text-align: center; color: #f43f5e;'>Shared Note Sync</h1>", unsafe_allow_html=True)
-    name_input = st.text_input("名前を入力（例：たろう）")
+    name_input = st.text_input("名前を入力")
     if name_input:
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("新しくノートを作る", use_container_width=True):
+            if st.button("新しく作る", use_container_width=True):
                 new_key = '-'.join([''.join(random.choices('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', k=4)) for _ in range(7)])
                 get_rooms_ref().document(new_key).set({'createdAt': get_jst_now().isoformat(), 'creator': name_input})
                 login_action(new_key, name_input); st.rerun()
         with col2:
             input_key = st.text_input("秘密の鍵を入力")
-            if st.button("ノートに参加する", use_container_width=True) and len(input_key) >= 29:
+            if st.button("参加する", use_container_width=True) and len(input_key) >= 29:
                 login_action(input_key, name_input); st.rerun()
     st.stop()
 
@@ -176,33 +165,44 @@ if not st.session_state.get("is_logged"):
 # 3. メイン処理
 # ==========================================
 room_key, user_name = st.session_state.room_key, st.session_state.user_name
-# データ取得
 events = [{"id": d.id, **d.to_dict()} for d in get_events_ref().where("roomKey", "==", room_key).stream()]
 ng_dates = [{"id": d.id, **d.to_dict()} for d in get_ng_ref().where("roomKey", "==", room_key).stream()]
 today_jst = get_jst_now().date()
-today_str = str(today_jst)
 
-# --- 共通部品: 最終コメント表示 ---
+# --- 共通部品: 最終コメント/アクティビティ情報 ---
+def get_latest_activity_time(item):
+    """スレッドの最終更新日時（コメントまたは作成時）を返す"""
+    comments = item.get("comments", [])
+    if comments:
+        # コメントの中で一番新しい時間を取得
+        last_c = max([c.get('createdAt', '') for c in comments])
+        return last_c
+    return item.get('createdAt', '') # コメントがなければ作成日時
+
 def render_thread_info(item):
     comments = item.get("comments", [])
     if comments:
-        # コメントを時間順に並べて最後を取得
         sorted_comments = sorted(comments, key=lambda x: x.get('createdAt', ''))
         last = sorted_comments[-1]
         color = st.session_state.room_user_colors.get(last['userName'], "#999999")
-        st.markdown(f"""
-        <div class="last-comment" style="border-color: {color};">
-            <span style="color: {color}; font-weight: bold;">{last['userName']}</span>: {last['text']}
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f'<div class="last-comment" style="border-color: {color};"><span style="color: {color}; font-weight: bold;">{last["userName"]}</span>: {last["text"]}</div>', unsafe_allow_html=True)
     else:
-        st.caption("まだコメントはありません")
+        st.caption("やり取りはまだありません（新着）")
 
-# --- タブ構成 ---
-tab1, tab2, tab3, tab4 = st.tabs(["📍 行きたい", "📅 確定した予定", "🗓️ カレンダー", "🚫 NG日"])
+# --- タブ ---
+tab1, tab2, tab3, tab4 = st.tabs(["📍 行きたい", "📅 予定一覧", "🗓️ カレンダー", "🚫 NG日"])
 
-# --- タブ1: 行きたい (追加順に表示) ---
+# --- タブ1: 行きたい ---
 with tab1:
+    # 1. 並べ替え設定
+    col_sort1, col_sort2 = st.columns([2, 1])
+    with col_sort2:
+        new_sort = st.selectbox("並べ替え", ["コメント最新順", "追加順（新しい順）", "追加順（古い順）"], index=["コメント最新順", "追加順（新しい順）", "追加順（古い順）"].index(st.session_state.sort_option))
+        if new_sort != st.session_state.sort_option:
+            st.session_state.sort_option = new_sort
+            save_app_settings(); st.rerun()
+
+    # 2. 追加フォーム
     with st.expander("＋ 新しい「行きたい場所」を追加"):
         t = st.text_input("場所/内容", key="input_title")
         u = st.text_input("URL", key="input_url")
@@ -217,9 +217,15 @@ with tab1:
                 })
                 st.session_state.clear_wish_inputs = True; st.rerun()
 
-    # 追加順（createdAtの昇順）にソート
-    wish_items = sorted([e for e in events if e.get("status") == "wishlist"], key=lambda x: x.get('createdAt', ''))
-    
+    # 3. リスト表示 (ソート適用)
+    wish_items = [e for e in events if e.get("status") == "wishlist"]
+    if st.session_state.sort_option == "コメント最新順":
+        wish_items = sorted(wish_items, key=get_latest_activity_time, reverse=True)
+    elif st.session_state.sort_option == "追加順（新しい順）":
+        wish_items = sorted(wish_items, key=lambda x: x.get('createdAt', ''), reverse=True)
+    else: # 古い順
+        wish_items = sorted(wish_items, key=lambda x: x.get('createdAt', ''))
+
     for item in wish_items:
         with st.container(border=True):
             c1, c2 = st.columns([5,1])
@@ -227,31 +233,25 @@ with tab1:
             c1.markdown(f"### {time_disp}{item['title']}", unsafe_allow_html=True)
             if c2.button("📝", key=f"ed_{item['id']}"): st.session_state.edit_id = item["id"]; st.rerun()
             
-            if item.get("url"): st.link_button("🔗 リンクを確認", item["url"])
+            if item.get("url"): st.link_button("🔗 リンク", item["url"])
             if item.get("memo"): st.info(item["memo"])
             
-            # 視認性向上のための最終コメント表示
             render_thread_info(item)
             
-            with st.expander("💬 やり取りと日程確定"):
-                # コメントを追加順に表示
+            with st.expander("💬 相談・日程確定"):
                 for c in sorted(item.get("comments", []), key=lambda x: x.get('createdAt', '')):
                     u_clr = st.session_state.room_user_colors.get(c['userName'], "#999999")
                     st.markdown(f"<b style='color:{u_clr}'>{c['userName']}</b>: {c['text']}", unsafe_allow_html=True)
                 
                 with st.form(key=f"f_{item['id']}", clear_on_submit=True):
-                    msg = st.text_input("メッセージを入力")
+                    msg = st.text_input("メッセージ")
                     if st.form_submit_button("送信") and msg:
-                        get_events_ref().document(item["id"]).update({
-                            "comments": firestore.ArrayUnion([{
-                                "userName": user_name, "text": msg, "createdAt": get_jst_now().isoformat()
-                            }])
-                        })
+                        get_events_ref().document(item["id"]).update({"comments": firestore.ArrayUnion([{"userName": user_name, "text": msg, "createdAt": get_jst_now().isoformat()}])})
                         st.rerun()
                 st.divider()
-                sd = st.date_input("確定する日", value=today_jst, key=f"sd_{item['id']}")
-                st_time = time_selector_ui(f"fix_time_{item['id']}")
-                if st.button("この日でスケジュールを確定する", key=f"fix_{item['id']}", use_container_width=True):
+                sd = st.date_input("確定日", value=today_jst, key=f"sd_{item['id']}")
+                st_time = time_selector_ui(f"fix_{item['id']}")
+                if st.button("この日で確定する", key=f"fix_btn_{item['id']}", use_container_width=True):
                     get_events_ref().document(item['id']).update({"status": "scheduled", "date": str(sd), "time": st_time})
                     st.rerun()
 
@@ -259,79 +259,66 @@ with tab1:
 with tab2:
     sched_items = sorted([e for e in events if e.get("status") == "scheduled"], key=lambda x: x["date"])
     for item in sched_items:
-        is_past = item["date"] < today_str
+        is_past = item["date"] < str(today_jst)
         with st.container(border=True):
             c1, c2 = st.columns([5,1])
+            dt_obj = datetime.strptime(item["date"], "%Y-%m-%d")
             time_str = f" {item['time']}" if item.get("time") else ""
-            c1.markdown(f"#### {'⌛' if is_past else '📅'} {item['date']}({get_weekday_jp(datetime.strptime(item['date'], '%Y-%m-%d'))}){time_str}")
+            c1.markdown(f"#### {'⌛' if is_past else '📅'} {item['date']}({get_weekday_jp(dt_obj)}){time_str}")
             c1.markdown(f"**{item['title']}**")
             if c2.button("📝", key=f"ed_s_{item['id']}"): st.session_state.edit_id = item["id"]; st.rerun()
             render_thread_info(item)
 
-# --- タブ3: カレンダー (月曜〜日曜の7列表示) ---
+# --- タブ3: カレンダー ---
 with tab3:
     cm1, cm2, cm3 = st.columns([1, 2, 1])
     if cm1.button("◀ 前月"):
-        st.session_state.current_month = (st.session_state.current_month - timedelta(days=1)).replace(day=1)
-        st.rerun()
+        st.session_state.current_month = (st.session_state.current_month - timedelta(days=1)).replace(day=1); st.rerun()
     cm2.markdown(f"<center><h3>{st.session_state.current_month.strftime('%Y年 %m月')}</h3></center>", unsafe_allow_html=True)
     if cm3.button("次月 ▶"):
-        st.session_state.current_month = (st.session_state.current_month + timedelta(days=32)).replace(day=1)
-        st.rerun()
+        st.session_state.current_month = (st.session_state.current_month + timedelta(days=32)).replace(day=1); st.rerun()
 
     cal = calendar.Calendar(firstweekday=0)
     month_days = cal.monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
     
     cols = st.columns(7)
-    for i, w in enumerate(["月", "火", "水", "木", "金", "土", "日"]):
-        cols[i].markdown(f"<center><b>{w}</b></center>", unsafe_allow_html=True)
+    for i, w in enumerate(["月", "火", "水", "木", "金", "土", "日"]): cols[i].markdown(f"<center><b>{w}</b></center>", unsafe_allow_html=True)
 
     for week in month_days:
         cols = st.columns(7)
         for i, day in enumerate(week):
-            if day == 0:
-                cols[i].write(""); continue
-            
+            if day == 0: cols[i].write(""); continue
             this_date = st.session_state.current_month.replace(day=day)
             date_str = str(this_date)
             is_today = (this_date == today_jst)
-            
             day_evs = [e for e in events if e.get("date") == date_str]
             day_ngs = [n for n in ng_dates if n.get("date") == date_str]
-            
             with cols[i]:
-                bg_class = "cal-today" if is_today else ""
-                html = f'<div class="cal-box {bg_class}"><div class="cal-date">{day}</div>'
-                for e in day_evs:
-                    html += f'<div class="cal-dot" style="background-color:rgba(59,130,246,0.2); color:#60a5fa;">📍 {e["title"]}</div>'
+                bg = "cal-today" if is_today else ""
+                html = f'<div class="cal-box {bg}"><div class="cal-date">{day}</div>'
+                for e in day_evs: html += f'<div class="cal-dot" style="background-color:rgba(59,130,246,0.2); color:#60a5fa;">📍 {e["title"]}</div>'
                 for n in day_ngs:
                     u_clr = st.session_state.room_user_colors.get(n.get("userName"), "#f43f5e")
                     html += f'<div class="cal-dot" style="background-color:{u_clr}33; color:{u_clr}; border-left: 2px solid {u_clr};">🚫 {n.get("userName")}</div>'
                 html += '</div>'
                 st.markdown(html, unsafe_allow_html=True)
 
-# --- タブ4: NG日 (時間指定を再実装) ---
+# --- タブ4: NG日 ---
 with tab4:
-    st.subheader("🚫 行けない日・時間を登録")
-    nd = st.date_input("日付", value=today_jst, key="ng_date_in")
-    nt = time_selector_ui("ng_time_in") # 時間指定を復活
-    nr = st.text_input("理由など", key="ng_reason_in")
-    
-    if st.button("NG登録", type="primary", use_container_width=True):
-        get_ng_ref().add({
-            "roomKey": room_key, "userName": user_name, "date": str(nd), 
-            "time": nt, "reason": nr, "createdAt": get_jst_now().isoformat()
-        })
-        st.session_state.clear_ng_inputs = True; st.rerun()
-    
+    st.subheader("🚫 行けない日の登録")
+    nd = st.date_input("日付", value=today_jst, key="ng_in")
+    nt = time_selector_ui("ng_time_in")
+    nr = st.text_input("理由", key="ng_reason_in")
+    if st.button("登録する", type="primary", use_container_width=True):
+        get_ng_ref().add({"roomKey": room_key, "userName": user_name, "date": str(nd), "time": nt, "reason": nr, "createdAt": get_jst_now().isoformat()})
+        st.rerun()
     st.divider()
-    sorted_ng = sorted(ng_dates, key=lambda x: x["date"], reverse=True)
-    for n in sorted_ng:
+    for n in sorted(ng_dates, key=lambda x: x["date"], reverse=True):
         with st.container(border=True):
             col_ng1, col_ng2 = st.columns([5,1])
             u_clr = st.session_state.room_user_colors.get(n.get("userName"), "#999999")
-            time_ng = f" ({n.get('time')})" if n.get("time") else ""
-            col_ng1.markdown(f"<b style='color:{u_clr}'>{n.get('userName')}</b> : {n['date']}{time_ng}", unsafe_allow_html=True)
+            t_ng = f" ({n.get('time')})" if n.get('time') else ""
+            col_ng1.markdown(f"<b style='color:{u_clr}'>{n.get('userName')}</b> : {n['date']}{t_ng}", unsafe_allow_html=True)
             col_ng1.write(f"理由: {n.get('reason', 'なし')}")
             if col_ng2.button("削除", key=f"del_ng_{n['id']}"):
                 get_ng_ref().document(n["id"]).delete(); st.rerun()
