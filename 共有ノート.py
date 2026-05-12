@@ -1,7 +1,84 @@
 # =====================================================
+# タブ
+# =====================================================
+
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📍 行きたい",
+    "📅 予定",
+    "🚫 NG日",
+    "🗓️ カレンダー"
+])
+
+# =====================================================
 # 行きたい
 # =====================================================
 
+with tab1:
+
+    with st.expander("＋追加"):
+
+        t = st.text_input("場所", key="input_title")
+
+        u = st.text_input("URL", key="input_url")
+
+        time_mode = st.selectbox(
+            "時間設定",
+            [
+                "終日",
+                "午前",
+                "午後",
+                "カスタム"
+            ],
+            key="time_mode"
+        )
+
+        start_time = None
+        end_time = None
+
+        if time_mode == "カスタム":
+
+            c1, c2 = st.columns(2)
+
+            with c1:
+                start_time = st.time_input(
+                    "開始",
+                    key="start_time"
+                )
+
+            with c2:
+                end_time = st.time_input(
+                    "終了",
+                    key="end_time"
+                )
+
+            time_text = (
+                f"{start_time.strftime('%H:%M')}〜"
+                f"{end_time.strftime('%H:%M')}"
+            )
+
+        else:
+
+            time_text = time_mode
+
+        m = st.text_area("メモ", key="input_memo")
+
+        if st.button("追加", type="primary"):
+
+            if t:
+
+                get_events_ref().add({
+                    "roomKey": room_key,
+                    "title": t,
+                    "url": u,
+                    "memo": m,
+                    "time": time_text,
+                    "status": "wishlist",
+                    "userName": user_name,
+                    "createdAt": get_jst_now().isoformat(),
+                    "comments": []
+                })
+
+                st.rerun()
 with tab1:
 
     with st.expander("＋追加"):
