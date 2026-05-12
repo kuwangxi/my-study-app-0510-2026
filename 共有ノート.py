@@ -132,13 +132,13 @@ st.markdown(f"""
     .cal-today {{ border: 2px solid {st.session_state.user_color} !important; background-color: #262626 !important; }}
     .cal-dot {{ font-size: 0.7em; margin-bottom: 1px; border-radius: 2px; padding: 1px 2px; line-height: 1.1; }}
     
-    /* 生理関連: 視認性の良いベタ塗りバッジ */
-    .period-dot {{ background-color: rgba(244, 63, 94, 0.25); color: #fb7185; border-left: 2px solid #f43f5e; }}
-    .ovulation-dot {{ background-color: rgba(168, 85, 247, 0.25); color: #c084fc; border-left: 2px solid #a855f7; }}
-    .pms-dot {{ background-color: rgba(234, 179, 8, 0.25); color: #fde047; border-left: 2px solid #eab308; }}
-    .fertility-dot {{ background-color: rgba(34, 197, 94, 0.25); color: #4ade80; border-left: 2px solid #22c55e; }}
+    /* 生理関連: 背景色を非表示、文字色のみで視認性を確保 */
+    .period-dot {{ background-color: transparent !important; color: #f43f5e; border: none !important; font-weight: bold; }}
+    .ovulation-dot {{ background-color: transparent !important; color: #a855f7; border: none !important; font-weight: bold; }}
+    .pms-dot {{ background-color: transparent !important; color: #eab308; border: none !important; font-weight: bold; }}
+    .fertility-dot {{ background-color: transparent !important; color: #22c55e; border: none !important; font-weight: bold; }}
     
-    /* 案2&3: NG日はグレーアウト & 斜線ストライプ柄 */
+    /* NG日: グレーアウト & 斜線ストライプ柄 */
     .ng-dot {{ 
         background: repeating-linear-gradient(
             45deg,
@@ -391,7 +391,7 @@ with tab3:
                 inner = f'<div class="cal-date">{day}</div>'
                 for p_type, p_label in day_periods: inner += f'<div class="cal-dot {p_type}-dot">{p_label}</div>'
                 for e in day_evs: inner += f'<div class="cal-dot" style="background-color:rgba(59,130,246,0.2); color:#60a5fa;">📍 {e["title"]}</div>'
-                # NG日の表示（ng-dot クラスを適用）
+                # NG日の表示
                 for n in day_ngs:
                     inner += f'<div class="cal-dot ng-dot">🚫 {n.get("userName")}</div>'
                 
