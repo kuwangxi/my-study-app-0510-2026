@@ -18,7 +18,7 @@ if "user_color" not in st.session_state: st.session_state.user_color = "#f43f5e"
 if "room_user_colors" not in st.session_state: st.session_state.room_user_colors = {}
 if "sort_option" not in st.session_state: st.session_state.sort_option = "コメント最新順"
 
-# --- 生理管理用の初期値 ---
+# --- 生理管理用の初期値 (修正済み) ---
 if "period_data" not in st.session_state:
     st.session_state.period_data = {
         "start_date": None,
@@ -71,7 +71,6 @@ def save_app_settings():
         colors = st.session_state.room_user_colors
         colors[st.session_state.user_name] = st.session_state.user_color
         
-        # 生理データも保存対象に含める
         period_to_save = st.session_state.period_data.copy()
         if period_to_save["start_date"]: period_to_save["start_date"] = str(period_to_save["start_date"])
         if period_to_save["end_date"]: period_to_save["end_date"] = str(period_to_save["end_date"])
@@ -97,8 +96,14 @@ def load_app_settings(room_key):
             
             p_data = s.get("period_data", {})
             if p_data:
-                if p_data.get("start_date"): p_data["start_date"] = datetime.strptime(p_data["start_date"], "%Y-%m-%d").date()
-                if p_data.get("end_date"): p_data["end_date"] = datetime.strptime(p_data["end_date"], "%Y-%m-%d").date()
+                if p_data.get("start_date") and p_data["start_date"] != "None":
+                    p_data["start_date"] = datetime.strptime(p_data["start_date"], "%Y-%m-%d").date()
+                else: p_data["start_date"] = None
+                
+                if p_data.get("end_date") and p_data["end_date"] != "None":
+                    p_data["end_date"] = datetime.strptime(p_data["end_date"], "%Y-%m-%d").date()
+                else: p_data["end_date"] = None
+                
                 st.session_state.period_data.update(p_data)
 
             if st.session_state.user_name in st.session_state.room_user_colors:
@@ -157,19 +162,28 @@ if st.session_state.get("is_logged"):
         st.session_state.user_color = picked_color; save_app_settings(); st.rerun()
     
     st.sidebar.divider()
-    # --- 生理日管理セクション (画像 unnamed (9).jpg を参考) ---
+    # --- 生理日管理セクション (エラー修正済み) ---
     st.sidebar.title("🩸 生理日管理")
     with st.sidebar.expander("前回の生理・周期設定"):
-        p_start = st.date_input("開始日", value=st.session_state.period_data["start_date"], key="p_start_in")
-        p_end = st.date_input("最終日", value=st.session_state.period_state.get("end_date", None) if st.session_state.period_data["end_date"] else None, key="p_end_in")
-        p_cycle = st.selectbox("生理周期を教えてください", options=list(range(7, 121)), index=list(range(7, 121)).index(st.session_state.period_data["cycle"]))
+        # 開始日
+        default_start = st.session_state.period_data.get("start_date") or get_jst_now().date()
+        p_start = st.date_input("開始日", value=default_start, key="p_start_in")
+        
+        # 最終日 (エラー箇所を修正: period_state -> period_data)
+        default_end = st.session_state.period_data.get("end_date") or (p_start + timedelta(days=5))
+        p_end = st.date_input("最終日", value=default_end, key="p_end_in")
+        
+        # 周期 (7日から120日まで)
+        cycle_options = list(range(7, 121))
+        current_cycle = st.session_state.period_data.get("cycle", 28)
+        p_cycle = st.selectbox("生理周期を教えてください", options=cycle_options, index=cycle_options.index(current_cycle))
         
         st.markdown("---")
         st.caption("管理する項目")
-        s_per = st.toggle("生理予定", value=st.session_state.period_data["show_period"])
-        s_ovu = st.toggle("排卵日", value=st.session_state.period_data["show_ovulation"])
-        s_fer = st.toggle("妊娠可能性", value=st.session_state.period_data["show_fertility"])
-        s_pms = st.toggle("PMS期間", value=st.session_state.period_data["show_pms"])
+        s_per = st.toggle("生理予定", value=st.session_state.period_data.get("show_period", True))
+        s_ovu = st.toggle("排卵日", value=st.session_state.period_data.get("show_ovulation", False))
+        s_fer = st.toggle("妊娠可能性", value=st.session_state.period_data.get("show_fertility", False))
+        s_pms = st.toggle("PMS期間", value=st.session_state.period_data.get("show_pms", False))
         
         if st.button("生理設定を保存", use_container_width=True):
             st.session_state.period_data.update({
@@ -215,36 +229,31 @@ today_jst = get_jst_now().date()
 period_dates = {}
 def calculate_period_logic():
     p = st.session_state.period_data
-    if not p["start_date"]: return
+    if not p.get("start_date"): return
     
-    # 複数月分（前後3ヶ月）の予定を算出
     base_start = p["start_date"]
-    duration = (p["end_date"] - p["start_date"]).days + 1 if p["end_date"] else 5
+    duration = (p["end_date"] - p["start_date"]).days + 1 if p.get("end_date") else 5
     
     for i in range(-1, 4):
         p_start = base_start + timedelta(days=p["cycle"] * i)
-        p_end = p_start + timedelta(days=duration - 1)
+        p_end = p_start + timedelta(days=max(0, duration - 1))
         
-        # 生理期間
         if p["show_period"]:
             curr = p_start
             while curr <= p_end:
                 period_dates.setdefault(str(curr), []).append(("period", "🩸 生理予定"))
                 curr += timedelta(days=1)
         
-        # PMS (開始7日前〜前日)
         if p["show_pms"]:
             for d in range(1, 8):
                 pms_day = p_start - timedelta(days=d)
                 period_dates.setdefault(str(pms_day), []).append(("pms", "🐥 PMS期間"))
         
-        # 排卵日 (次回開始の14日前)
         next_start = p_start + timedelta(days=p["cycle"])
         ovulation_day = next_start - timedelta(days=14)
         if p["show_ovulation"]:
             period_dates.setdefault(str(ovulation_day), []).append(("ovulation", "🥚 排卵日"))
         
-        # 妊娠可能性 (排卵日前5日〜後1日)
         if p["show_fertility"]:
             for d in range(-5, 2):
                 fer_day = ovulation_day + timedelta(days=d)
@@ -367,17 +376,13 @@ with tab3:
                 day_periods = period_dates.get(date_str, [])
                 
                 inner = f'<div class="cal-date">{day}</div>'
-                # 生理情報の表示
-                for p_type, p_label in day_periods:
-                    inner += f'<div class="cal-dot {p_type}-dot">{p_label}</div>'
-                # 予定・NGの表示
+                for p_type, p_label in day_periods: inner += f'<div class="cal-dot {p_type}-dot">{p_label}</div>'
                 for e in day_evs: inner += f'<div class="cal-dot" style="background-color:rgba(59,130,246,0.2); color:#60a5fa;">📍 {e["title"]}</div>'
                 for n in day_ngs:
                     u_clr = st.session_state.room_user_colors.get(n.get("userName"), "#f43f5e")
                     inner += f'<div class="cal-dot" style="background-color:{u_clr}33; color:{u_clr}; border-left: 2px solid {u_clr};">🚫 {n.get("userName")}</div>'
                 
                 cal_html += f'<div class="cal-box {"cal-today" if is_today else ""}">{inner}</div>'
-    
     st.markdown(cal_html + '</div>', unsafe_allow_html=True)
 
 # --- タブ4: NG日 ---
