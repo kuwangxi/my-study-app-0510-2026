@@ -18,7 +18,7 @@ if "user_color" not in st.session_state: st.session_state.user_color = "#f43f5e"
 if "room_user_colors" not in st.session_state: st.session_state.room_user_colors = {}
 if "sort_option" not in st.session_state: st.session_state.sort_option = "コメント最新順"
 
-# --- 生理管理用の初期値 (修正済み) ---
+# --- 生理管理用の初期値 ---
 if "period_data" not in st.session_state:
     st.session_state.period_data = {
         "start_date": None,
@@ -131,10 +131,13 @@ st.markdown(f"""
     .cal-date {{ font-size: 0.8em; font-weight: bold; margin-bottom: 2px; }}
     .cal-today {{ border: 2px solid {st.session_state.user_color} !important; background-color: #262626 !important; }}
     .cal-dot {{ font-size: 0.7em; margin-bottom: 1px; border-radius: 2px; padding: 1px 2px; line-height: 1.1; }}
-    .period-dot {{ background-color: rgba(244, 63, 94, 0.2); color: #fb7185; border-left: 2px solid #f43f5e; }}
-    .ovulation-dot {{ background-color: rgba(168, 85, 247, 0.2); color: #c084fc; border-left: 2px solid #a855f7; }}
-    .pms-dot {{ background-color: rgba(234, 179, 8, 0.2); color: #fde047; border-left: 2px solid #eab308; }}
-    .fertility-dot {{ background-color: rgba(34, 197, 94, 0.2); color: #4ade80; border-left: 2px solid #22c55e; }}
+    
+    /* 案4: 生理関連は背景なし・文字(アイコン)のみでシンプルに */
+    .period-dot {{ background-color: transparent; color: #f43f5e; font-weight: 600; }}
+    .ovulation-dot {{ background-color: transparent; color: #a855f7; font-weight: 600; }}
+    .pms-dot {{ background-color: transparent; color: #eab308; font-weight: 600; }}
+    .fertility-dot {{ background-color: transparent; color: #22c55e; font-weight: 600; }}
+    
     .last-comment {{ font-size: 0.85em; border-left: 4px solid; padding-left: 10px; margin-top: 10px; margin-bottom: 10px; line-height: 1.4; }}
     .time-badge {{ background-color: rgba(128, 128, 128, 0.2); padding: 2px 6px; border-radius: 4px; font-size: 0.8em; }}
 </style>
@@ -162,18 +165,14 @@ if st.session_state.get("is_logged"):
         st.session_state.user_color = picked_color; save_app_settings(); st.rerun()
     
     st.sidebar.divider()
-    # --- 生理日管理セクション (エラー修正済み) ---
     st.sidebar.title("🩸 生理日管理")
     with st.sidebar.expander("前回の生理・周期設定"):
-        # 開始日
         default_start = st.session_state.period_data.get("start_date") or get_jst_now().date()
         p_start = st.date_input("開始日", value=default_start, key="p_start_in")
         
-        # 最終日 (エラー箇所を修正: period_state -> period_data)
         default_end = st.session_state.period_data.get("end_date") or (p_start + timedelta(days=5))
         p_end = st.date_input("最終日", value=default_end, key="p_end_in")
         
-        # 周期 (7日から120日まで)
         cycle_options = list(range(7, 121))
         current_cycle = st.session_state.period_data.get("cycle", 28)
         p_cycle = st.selectbox("生理周期を教えてください", options=cycle_options, index=cycle_options.index(current_cycle))
