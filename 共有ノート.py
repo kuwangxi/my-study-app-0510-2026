@@ -15,7 +15,6 @@ if "font_size" not in st.session_state: st.session_state.font_size = 14
 if "current_month" not in st.session_state: st.session_state.current_month = datetime.now(timezone(timedelta(hours=9))).date().replace(day=1)
 if "user_color" not in st.session_state: st.session_state.user_color = "#f43f5e" 
 if "room_user_colors" not in st.session_state: st.session_state.room_user_colors = {}
-if "sort_option" not in st.session_state: st.session_state.sort_option = "コメント最新順"
 if "period_data" not in st.session_state:
     st.session_state.period_data = {
         "start_date": None, "end_date": None, "cycle": 28,
@@ -39,7 +38,6 @@ db = firestore.client()
 APP_ID = "couple-secure-v2"
 
 def get_events_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_events')
-def get_ng_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_rooms') # 設定用
 def get_rooms_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_rooms')
 def get_ng_data_ref(): return db.collection('artifacts').document(APP_ID).collection('public').document('data').collection('secure_ng_dates')
 
@@ -52,7 +50,7 @@ def save_app_settings():
         if p_save["start_date"]: p_save["start_date"] = str(p_save["start_date"])
         if p_save["end_date"]: p_save["end_date"] = str(p_save["end_date"])
         get_rooms_ref().document(st.session_state.room_key).set({
-            "settings": {"font_size": st.session_state.font_size, "user_colors": colors, "sort_option": st.session_state.sort_option, "period_data": p_save}
+            "settings": {"font_size": st.session_state.font_size, "user_colors": colors, "period_data": p_save}
         }, merge=True)
 
 def load_app_settings(room_key):
@@ -63,42 +61,48 @@ def load_app_settings(room_key):
             s = data["settings"]
             st.session_state.font_size = s.get("font_size", 14)
             st.session_state.room_user_colors = s.get("user_colors", {})
-            st.session_state.sort_option = s.get("sort_option", "コメント最新順")
             p_data = s.get("period_data", {})
             if p_data:
                 if p_data.get("start_date") and p_data["start_date"] != "None":
-                    p_data["start_date"] = datetime.strptime(p_data["start_date"], "%Y-%m-%d").date()
+                    try: st.session_state.period_data["start_date"] = datetime.strptime(p_data["start_date"], "%Y-%m-%d").date()
+                    except: pass
                 if p_data.get("end_date") and p_data["end_date"] != "None":
-                    p_data["end_date"] = datetime.strptime(p_data["end_date"], "%Y-%m-%d").date()
-                st.session_state.period_data.update(p_data)
+                    try: st.session_state.period_data["end_date"] = datetime.strptime(p_data["end_date"], "%Y-%m-%d").date()
+                    except: pass
+                st.session_state.period_data.update({k: v for k, v in p_data.items() if k not in ["start_date", "end_date"]})
             if st.session_state.user_name in st.session_state.room_user_colors:
                 st.session_state.user_color = st.session_state.room_user_colors[st.session_state.user_name]
 
-# --- 【調整済み】時間選択UI ---
+# --- 【修正済み】時間選択UI (TypeError防止とUI改善) ---
 def time_selector_ui(key_prefix, default_val="カスタム"):
-    # デフォルト値の判定
+    # default_valがNoneや空文字の場合のガード
+    if not default_val:
+        default_val = "カスタム"
+        
     options = ["終日", "午前中", "午後", "カスタム"]
     
-    # default_valがHH:MM～HH:MM形式の場合、カスタムとして扱う
-    current_idx = 3 # デフォルトをカスタムに
+    # 選択肢の初期値を決定
+    current_idx = 3 # デフォルトはカスタム
     if default_val in options:
         current_idx = options.index(default_val)
+    elif "～" in str(default_val):
+        current_idx = 3
     
     t_type = st.selectbox("時間指定", options, index=current_idx, key=f"t_type_{key_prefix}")
     
     if t_type == "カスタム":
         col_c1, col_c2 = st.columns(2)
-        # 既存の時間があればパース、なければ現在時刻
+        # 既存の時間(HH:MM～HH:MM)があれば分解して初期値にする
         start_def = time(10, 0)
         end_def = time(12, 0)
-        if "～" in default_val:
+        if "～" in str(default_val):
             try:
-                parts = default_val.split("～")
+                parts = str(default_val).split("～")
                 start_def = datetime.strptime(parts[0], "%H:%M").time()
                 end_def = datetime.strptime(parts[1], "%H:%M").time()
             except: pass
             
-        t_start = col_c1.time_input("開始", value=start_def, key=f"t_start_{key_prefix}", step=900) # 15分刻み
+        t_start = col_c1.time_input("開始", value=start_def, key=f"t_start_{key_prefix}", step=900)
         t_end = col_c2.time_input("終了", value=end_def, key=f"t_end_{key_prefix}", step=900)
         return f"{t_start.strftime('%H:%M')}～{t_end.strftime('%H:%M')}"
     return t_type
@@ -120,7 +124,7 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
-# ログイン処理
+# ログイン・認証
 if "is_logged" not in st.session_state:
     q_room, q_user = st.query_params.get("room"), st.query_params.get("user")
     if q_room and q_user:
@@ -168,13 +172,13 @@ if not st.session_state.get("is_logged"):
                 st.query_params["room"], st.query_params["user"] = input_k, name_in; load_app_settings(input_k); st.rerun()
     st.stop()
 
-# データの取得
+# データ取得
 room_key = st.session_state.room_key
 events = [{"id": d.id, **d.to_dict()} for d in get_events_ref().where("roomKey", "==", room_key).stream()]
 ng_data = [{"id": d.id, **d.to_dict()} for d in get_ng_data_ref().where("roomKey", "==", room_key).stream()]
 today_jst = get_jst_now().date()
 
-# 生理計算 (🌙アイコン)
+# 生理予測 (🌙)
 period_dates = {}
 p = st.session_state.period_data
 if p.get("start_date") and p.get("show_period"):
@@ -207,16 +211,20 @@ with tab1:
                 if st.button("確定する", key=f"fbtn_{item['id']}", use_container_width=True):
                     get_events_ref().document(item['id']).update({"status": "scheduled", "date": str(sd), "time": st_time}); st.rerun()
 
-# --- タブ2: 予定一覧 (編集機能追加) ---
+# --- タブ2: 予定一覧 (編集・復元・削除) ---
 with tab2:
-    sched_items = sorted([e for e in events if e.get("status") == "scheduled"], key=lambda x: x["date"])
+    sched_items = sorted([e for e in events if e.get("status") == "scheduled"], key=lambda x: x.get("date", ""))
     for item in sched_items:
         with st.container(border=True):
-            st.write(f"📅 {item['date']} {item.get('time','')} \n**{item['title']}**")
+            st.write(f"📅 {item.get('date','')} {item.get('time','')} \n**{item['title']}**")
             
             with st.expander("予定の編集・削除"):
-                # 日付と時間の編集フォーム
-                new_d = st.date_input("日付変更", value=datetime.strptime(item['date'], "%Y-%m-%d").date(), key=f"edate_{item['id']}")
+                # 日付変更
+                try: current_date = datetime.strptime(item.get('date', str(today_jst)), "%Y-%m-%d").date()
+                except: current_date = today_jst
+                new_d = st.date_input("日付変更", value=current_date, key=f"edate_{item['id']}")
+                
+                # 【追加】時間帯変更
                 new_t = time_selector_ui(f"etime_{item['id']}", default_val=item.get("time", "カスタム"))
                 
                 if st.button("変更を保存", key=f"save_{item['id']}", use_container_width=True):
