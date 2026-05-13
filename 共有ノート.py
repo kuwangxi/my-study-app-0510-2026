@@ -18,7 +18,7 @@ if "user_color" not in st.session_state: st.session_state.user_color = "#f43f5e"
 if "room_user_colors" not in st.session_state: st.session_state.room_user_colors = {}
 if "sort_option" not in st.session_state: st.session_state.sort_option = "コメント最新順"
 
-# --- 生理管理用の初期値 (全項目復元) ---
+# --- 生理管理用の初期値 ---
 if "period_data" not in st.session_state:
     st.session_state.period_data = {
         "start_date": None, "end_date": None, "cycle": 28,
@@ -91,7 +91,7 @@ def load_app_settings(room_key):
             if st.session_state.user_name in st.session_state.room_user_colors:
                 st.session_state.user_color = st.session_state.room_user_colors[st.session_state.user_name]
 
-# --- 共通UI: 時間選択 (デフォルトはカスタム) ---
+# --- 共通UI: 時間選択 ---
 def time_selector_ui(key_prefix, default_val="カスタム"):
     options = ["終日", "午前中", "午後", "カスタム"]
     idx = options.index(default_val) if default_val in options else 3
@@ -103,63 +103,22 @@ def time_selector_ui(key_prefix, default_val="カスタム"):
         return f"{t_start.strftime('%H:%M')}～{t_end.strftime('%H:%M')}"
     return t_type
 
-# CSS (視認性向上のためテーマ変数を使用しつつデザインを復元)
+# CSS
 st.markdown(f"""
 <style>
     html, body, [class*="st-"] {{ font-size: {st.session_state.font_size}px !important; }}
-    
     .cal-grid {{ display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; width: 100%; margin-top: 10px; }}
-    
-    /* 曜日ヘッダー: ライトモードでの黒潰れを防止 */
-    .cal-header-item {{ 
-        text-align: center; font-weight: bold; font-size: 0.8em; padding: 5px 0; 
-        background-color: var(--secondary-background-color); 
-        color: var(--text-color);
-        border-radius: 4px; 
-    }}
-    
-    /* 日付ボックス: 背景と枠線をテーマに追従 */
-    .cal-box {{ 
-        border: 1px solid rgba(128, 128, 128, 0.3); 
-        border-radius: 4px; padding: 4px; min-height: 85px; 
-        background-color: var(--background-color); 
-        position: relative; overflow-y: auto; 
-    }}
-    
+    .cal-header-item {{ text-align: center; font-weight: bold; font-size: 0.8em; padding: 5px 0; background-color: var(--secondary-background-color); color: var(--text-color); border-radius: 4px; }}
+    .cal-box {{ border: 1px solid rgba(128, 128, 128, 0.3); border-radius: 4px; padding: 4px; min-height: 85px; background-color: var(--background-color); position: relative; overflow-y: auto; }}
     .cal-date {{ font-size: 0.8em; font-weight: bold; margin-bottom: 2px; color: var(--text-color); }}
-    
-    .cal-today {{ 
-        border: 2px solid {st.session_state.user_color} !important; 
-        background-color: var(--secondary-background-color) !important; 
-    }}
-    
+    .cal-today {{ border: 2px solid {st.session_state.user_color} !important; background-color: var(--secondary-background-color) !important; }}
     .cal-dot {{ font-size: 0.7em; margin-bottom: 1px; border-radius: 2px; padding: 1px 2px; line-height: 1.1; }}
-    
-    /* 📍予定の背景色を復元 */
-    .event-dot {{
-        background-color: rgba(59, 130, 246, 0.2) !important;
-        color: #60a5fa !important;
-    }}
-    
-    /* 生理関連: 背景色なし、文字色のみ */
+    .event-dot {{ background-color: rgba(59, 130, 246, 0.2) !important; color: #60a5fa !important; }}
     .period-dot {{ background-color: transparent !important; color: #f43f5e; border: none !important; font-weight: bold; font-size: 1.1em; }}
     .ovulation-dot {{ background-color: transparent !important; color: #a855f7; border: none !important; font-weight: bold; font-size: 1.1em; }}
     .pms-dot {{ background-color: transparent !important; color: #eab308; border: none !important; font-weight: bold; font-size: 1.1em; }}
     .fertility-dot {{ background-color: transparent !important; color: #22c55e; border: none !important; font-weight: bold; font-size: 1.1em; }}
-    
-    /* NG日: ストライプを復元しつつライトモード対応 */
-    .ng-dot {{ 
-        background: repeating-linear-gradient(
-            45deg,
-            rgba(128, 128, 128, 0.1),
-            rgba(128, 128, 128, 0.1) 5px,
-            rgba(150, 150, 150, 0.2) 5px,
-            rgba(150, 150, 150, 0.2) 10px
-        );
-        color: var(--text-color); 
-        border: 1px solid rgba(128, 128, 128, 0.3);
-    }}
-
+    .ng-dot {{ background: repeating-linear-gradient(45deg, rgba(128, 128, 128, 0.1), rgba(128, 128, 128, 0.1) 5px, rgba(150, 150, 150, 0.2) 5px, rgba(150, 150, 150, 0.2) 10px); color: var(--text-color); border: 1px solid rgba(128, 128, 128, 0.3); }}
     .last-comment {{ font-size: 0.85em; border-left: 4px solid; padding-left: 10px; margin-top: 10px; margin-bottom: 10px; line-height: 1.4; }}
     .time-badge {{ background-color: rgba(128, 128, 128, 0.2); padding: 2px 6px; border-radius: 4px; font-size: 0.8em; }}
 </style>
@@ -194,23 +153,17 @@ if st.session_state.get("is_logged"):
         p_end = st.date_input("最終日", value=p.get("end_date") or (p_start + timedelta(days=5)))
         cycle_options = list(range(7, 121))
         p_cycle = st.selectbox("生理周期", options=cycle_options, index=cycle_options.index(p.get("cycle", 28)))
-        
         s_per = st.toggle("生理予定", value=p.get("show_period", True))
         s_ovu = st.toggle("排卵日", value=p.get("show_ovulation", False))
         s_fer = st.toggle("妊娠可能性", value=p.get("show_fertility", False))
         s_pms = st.toggle("PMS期間", value=p.get("show_pms", False))
-        
         if st.button("設定を保存", use_container_width=True):
-            st.session_state.period_data.update({
-                "start_date": p_start, "end_date": p_end, "cycle": p_cycle,
-                "show_period": s_per, "show_ovulation": s_ovu, "show_fertility": s_fer, "show_pms": s_pms
-            })
+            st.session_state.period_data.update({"start_date": p_start, "end_date": p_end, "cycle": p_cycle, "show_period": s_per, "show_ovulation": s_ovu, "show_fertility": s_fer, "show_pms": s_pms})
             save_app_settings(); st.rerun()
 
     st.sidebar.divider()
     st.session_state.font_size = st.sidebar.slider("文字サイズ", 10, 24, value=st.session_state.font_size)
-    if st.sidebar.button("ログアウト", use_container_width=True): 
-        st.session_state.is_logged = False; st.query_params.clear(); st.rerun()
+    if st.sidebar.button("ログアウト", use_container_width=True): st.session_state.is_logged = False; st.query_params.clear(); st.rerun()
 
 if not st.session_state.get("is_logged"):
     st.markdown("<h1 style='text-align: center; color: #f43f5e;'>Shared Note Sync</h1>", unsafe_allow_html=True)
@@ -236,7 +189,7 @@ events = [{"id": d.id, **d.to_dict()} for d in get_events_ref().where("roomKey",
 ng_dates = [{"id": d.id, **d.to_dict()} for d in get_ng_ref().where("roomKey", "==", room_key).stream()]
 today_jst = get_jst_now().date()
 
-# --- 生理予測計算ロジック (アイコンのみに修正) ---
+# --- 生理予測計算ロジック ---
 period_dates = {}
 def calculate_period_logic():
     p = st.session_state.period_data
@@ -257,8 +210,7 @@ def calculate_period_logic():
                 period_dates.setdefault(str(pms_day), []).append(("pms", "🐥"))
         next_start = p_start + timedelta(days=p["cycle"])
         ovulation_day = next_start - timedelta(days=14)
-        if p["show_ovulation"]:
-            period_dates.setdefault(str(ovulation_day), []).append(("ovulation", "🥚"))
+        if p["show_ovulation"]: period_dates.setdefault(str(ovulation_day), []).append(("ovulation", "🥚"))
         if p["show_fertility"]:
             for d in range(-5, 2):
                 fer_day = ovulation_day + timedelta(days=d)
@@ -279,11 +231,11 @@ def render_thread_info(item):
 
 tab1, tab2, tab3, tab4 = st.tabs(["📍 行きたい", "📅 予定一覧", "🗓️ カレンダー", "🚫 NG日"])
 
-# --- タブ1: 行きたい ---
+# --- タブ1: 行きたい (コメント機能復元) ---
 with tab1:
     with st.expander("＋ 追加"):
         t = st.text_input("場所/内容", key="input_title")
-        wt = time_selector_ui("wish_add") # デフォルトカスタム
+        wt = time_selector_ui("wish_add")
         if st.button("リストに追加", type="primary"):
             if t:
                 get_events_ref().add({"roomKey": room_key, "title": t, "status": "wishlist", "comments": [], "time": wt, "createdAt": get_jst_now().isoformat()})
@@ -294,19 +246,37 @@ with tab1:
             st.markdown(f"### {item['title']}")
             if item.get("time"): st.markdown(f"<span class='time-badge'>⏰ {item['time']}</span>", unsafe_allow_html=True)
             render_thread_info(item)
-            with st.expander("💬 相談・確定"):
+            
+            # 【復元】コメント入力・一覧と予定確定
+            with st.expander("💬 コメント・相談・確定"):
+                # 既存コメント一覧
+                for c in sorted(item.get("comments", []), key=lambda x: x.get('createdAt', '')):
+                    c_user = c.get('userName', '不明')
+                    c_color = st.session_state.room_user_colors.get(c_user, "#999999")
+                    st.markdown(f'<div style="font-size: 0.9em; margin-bottom: 5px;"><span style="color: {c_color}; font-weight: bold;">{c_user}</span>: {c.get("text", "")}</div>', unsafe_allow_html=True)
+                
+                # 新規コメント
+                c_col1, c_col2 = st.columns([4, 1])
+                new_c = c_col1.text_input("コメントを入力", key=f"nc_{item['id']}", label_visibility="collapsed")
+                if c_col2.button("送信", key=f"ncb_{item['id']}", use_container_width=True):
+                    if new_c:
+                        c_obj = {"userName": user_name, "text": new_c, "createdAt": get_jst_now().isoformat()}
+                        get_events_ref().document(item['id']).update({"comments": firestore.ArrayUnion([c_obj])})
+                        st.rerun()
+                
+                st.divider()
+                st.write("📅 予定を確定する")
                 sd, st_time = st.date_input("確定日", value=today_jst, key=f"sd_{item['id']}"), time_selector_ui(f"fix_{item['id']}")
-                if st.button("確定する", key=f"fbtn_{item['id']}", use_container_width=True):
+                if st.button("確定してカレンダーへ移動", key=f"fbtn_{item['id']}", use_container_width=True):
                     get_events_ref().document(item['id']).update({"status": "scheduled", "date": str(sd), "time": st_time}); st.rerun()
 
-# --- タブ2: 予定一覧 (編集・削除機能を復元) ---
+# --- タブ2: 予定一覧 ---
 with tab2:
     sched_items = sorted([e for e in events if e.get("status") == "scheduled"], key=lambda x: x["date"])
     for item in sched_items:
         with st.container(border=True):
             st.write(f"📅 {item['date']} {item.get('time','')}")
             st.markdown(f"**{item['title']}**")
-            
             col_edit, col_del = st.columns(2)
             with col_edit:
                 with st.expander("📝 編集"):
@@ -314,16 +284,10 @@ with tab2:
                     new_date = st.date_input("日付", value=datetime.strptime(item['date'], "%Y-%m-%d").date(), key=f"edit_d_{item['id']}")
                     new_time = time_selector_ui(f"edit_tm_{item['id']}", default_val=item.get('time', 'カスタム'))
                     if st.button("更新保存", key=f"save_{item['id']}", use_container_width=True):
-                        get_events_ref().document(item['id']).update({
-                            "title": new_title,
-                            "date": str(new_date),
-                            "time": new_time
-                        })
-                        st.rerun()
+                        get_events_ref().document(item['id']).update({"title": new_title, "date": str(new_date), "time": new_time}); st.rerun()
             with col_del:
                 if st.button("🗑️ 削除", key=f"del_{item['id']}", use_container_width=True):
-                    get_events_ref().document(item['id']).delete()
-                    st.rerun()
+                    get_events_ref().document(item['id']).delete(); st.rerun()
 
 # --- タブ3: カレンダー ---
 with tab3:
@@ -331,31 +295,21 @@ with tab3:
     if cm1.button("◀ 前月"): st.session_state.current_month = (st.session_state.current_month - timedelta(days=1)).replace(day=1); st.rerun()
     cm2.markdown(f"<center><h3>{st.session_state.current_month.strftime('%Y年 %m月')}</h3></center>", unsafe_allow_html=True)
     if cm3.button("次月 ▶"): st.session_state.current_month = (st.session_state.current_month + timedelta(days=32)).replace(day=1); st.rerun()
-
     cal_html = '<div class="cal-grid">'
     for w in ["月", "火", "水", "木", "金", "土", "日"]: cal_html += f'<div class="cal-header-item">{w}</div>'
-    
     cal_obj = calendar.Calendar(firstweekday=0)
     month_days = cal_obj.monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
-    
     for week in month_days:
         for day in week:
             if day == 0: cal_html += '<div></div>'
             else:
                 this_date = st.session_state.current_month.replace(day=day)
                 date_str = str(this_date)
-                is_today = (this_date == today_jst)
                 inner = f'<div class="cal-date">{day}</div>'
-                # 生理情報の描画
-                for p_type, p_label in period_dates.get(date_str, []):
-                    inner += f'<div class="cal-dot {p_type}-dot">{p_label}</div>'
-                # 📍予定の描画 (背景色ありを復元)
-                for e in [e for e in events if e.get("date") == date_str]:
-                    inner += f'<div class="cal-dot event-dot">📍 {e["title"]}</div>'
-                # 🚫NG日の描画
-                for n in [n for n in ng_dates if n.get("date") == date_str]:
-                    inner += f'<div class="cal-dot ng-dot">🚫 {n.get("userName")}</div>'
-                cal_html += f'<div class="cal-box {"cal-today" if is_today else ""}">{inner}</div>'
+                for p_type, p_label in period_dates.get(date_str, []): inner += f'<div class="cal-dot {p_type}-dot">{p_label}</div>'
+                for e in [e for e in events if e.get("date") == date_str]: inner += f'<div class="cal-dot event-dot">📍 {e["title"]}</div>'
+                for n in [n for n in ng_dates if n.get("date") == date_str]: inner += f'<div class="cal-dot ng-dot">🚫 {n.get("userName")}</div>'
+                cal_html += f'<div class="cal-box {"cal-today" if this_date == today_jst else ""}">{inner}</div>'
     st.markdown(cal_html + '</div>', unsafe_allow_html=True)
 
 # --- タブ4: NG日 ---
