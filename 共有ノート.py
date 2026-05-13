@@ -27,9 +27,6 @@ if "period_data" not in st.session_state:
     }
 
 def get_jst_now(): return datetime.now(timezone(timedelta(hours=9)))
-def get_weekday_jp(dt):
-    w_list = ['月', '火', '水', '木', '金', '土', '日']
-    return w_list[dt.weekday()]
 
 # Firebase初期化
 if not firebase_admin._apps:
@@ -103,8 +100,7 @@ def get_shinjuku_weather():
         res = requests.get(url).json()
         w_map = {}
         for i, date_str in enumerate(res['daily']['time']):
-            code = res['daily']['weathercode'][i]
-            wind = res['daily']['windspeed_10m_max'][i]
+            code = res['daily']['weathercode'][i]; wind = res['daily']['windspeed_10m_max'][i]
             if wind > 20.0: mark = "💨"
             elif code in [0, 1]: mark = "☀️"
             elif code in [2, 3]: mark = "☁️"
@@ -115,8 +111,7 @@ def get_shinjuku_weather():
             else: mark = ""
             w_map[date_str] = mark
         return w_map
-    except:
-        return {}
+    except: return {}
 
 weather_data = get_shinjuku_weather()
 
@@ -159,27 +154,20 @@ def login_action(room, user):
     load_app_settings(room)
 
 if st.session_state.get("is_logged"):
-    st.sidebar.title("🎨 ユーザー設定")
+    st.sidebar.title("🎨 設定")
     picked_color = st.sidebar.color_picker("テーマカラー", value=st.session_state.user_color)
     if picked_color != st.session_state.user_color:
         st.session_state.user_color = picked_color; save_app_settings(); st.rerun()
-    
     st.sidebar.divider()
     st.sidebar.title("🩸 生理日管理")
     with st.sidebar.expander("生理管理設定"):
         p = st.session_state.period_data
         p_start = st.date_input("開始日", value=p.get("start_date") or get_jst_now().date())
         p_end = st.date_input("最終日", value=p.get("end_date") or (p_start + timedelta(days=5)))
-        cycle_options = list(range(7, 121))
-        p_cycle = st.selectbox("生理周期", options=cycle_options, index=cycle_options.index(p.get("cycle", 28)))
-        s_per = st.toggle("生理予定", value=p.get("show_period", True))
-        s_ovu = st.toggle("排卵日", value=p.get("show_ovulation", False))
-        s_fer = st.toggle("妊娠可能性", value=p.get("show_fertility", False))
-        s_pms = st.toggle("PMS期間", value=p.get("show_pms", False))
+        p_cycle = st.selectbox("生理周期", options=list(range(7, 121)), index=list(range(7, 121)).index(p.get("cycle", 28)))
         if st.button("設定を保存", use_container_width=True):
-            st.session_state.period_data.update({"start_date": p_start, "end_date": p_end, "cycle": p_cycle, "show_period": s_per, "show_ovulation": s_ovu, "show_fertility": s_fer, "show_pms": s_pms})
+            st.session_state.period_data.update({"start_date": p_start, "end_date": p_end, "cycle": p_cycle})
             save_app_settings(); st.rerun()
-
     st.sidebar.divider()
     st.session_state.font_size = st.sidebar.slider("文字サイズ", 10, 24, value=st.session_state.font_size)
     if st.sidebar.button("ログアウト", use_container_width=True): st.session_state.is_logged = False; st.query_params.clear(); st.rerun()
@@ -208,58 +196,40 @@ events = [{"id": d.id, **d.to_dict()} for d in get_events_ref().where("roomKey",
 ng_dates = [{"id": d.id, **d.to_dict()} for d in get_ng_ref().where("roomKey", "==", room_key).stream()]
 today_jst = get_jst_now().date()
 
-# --- 生理予測計算ロジック ---
+# --- 生理予測ロジック ---
 period_dates = {}
 def calculate_period_logic():
     p = st.session_state.period_data
     if not p.get("start_date"): return
-    base_start = p["start_date"]
-    duration = (p["end_date"] - p["start_date"]).days + 1 if p.get("end_date") else 5
+    base_start = p["start_date"]; duration = (p["end_date"] - p["start_date"]).days + 1 if p.get("end_date") else 5
     for i in range(-1, 4):
         p_start = base_start + timedelta(days=p["cycle"] * i)
-        p_end = p_start + timedelta(days=max(0, duration - 1))
-        if p["show_period"]:
-            curr = p_start
-            while curr <= p_end:
-                period_dates.setdefault(str(curr), []).append(("period", "🌙"))
-                curr += timedelta(days=1)
-        if p["show_pms"]:
-            for d in range(1, 8):
-                pms_day = p_start - timedelta(days=d)
-                period_dates.setdefault(str(pms_day), []).append(("pms", "🐥"))
-        next_start = p_start + timedelta(days=p["cycle"])
-        ovulation_day = next_start - timedelta(days=14)
-        if p["show_ovulation"]: period_dates.setdefault(str(ovulation_day), []).append(("ovulation", "🥚"))
-        if p["show_fertility"]:
-            for d in range(-5, 2):
-                fer_day = ovulation_day + timedelta(days=d)
-                period_dates.setdefault(str(fer_day), []).append(("fertility", "💖"))
+        for d in range(duration): period_dates.setdefault(str(p_start + timedelta(days=d)), []).append(("period", "🌙"))
+        ovulation_day = (p_start + timedelta(days=p["cycle"])) - timedelta(days=14)
+        period_dates.setdefault(str(ovulation_day), []).append(("ovulation", "🥚"))
 
 calculate_period_logic()
 
 def get_latest_activity_time(item):
-    comments = item.get("comments", [])
-    return max([c.get('createdAt', '') for c in comments]) if comments else item.get('createdAt', '')
+    comments = item.get("comments", []); return max([c.get('createdAt', '') for c in comments]) if comments else item.get('createdAt', '')
 
 def render_thread_info(item):
     comments = item.get("comments", [])
     if comments:
-        last = sorted(comments, key=lambda x: x.get('createdAt', ''))[-1]
-        color = st.session_state.room_user_colors.get(last['userName'], "#999999")
+        last = sorted(comments, key=lambda x: x.get('createdAt', ''))[-1]; color = st.session_state.room_user_colors.get(last['userName'], "#999999")
         st.markdown(f'<div class="last-comment" style="border-color: {color};"><span style="color: {color}; font-weight: bold;">{last["userName"]}</span>: {last["text"]}</div>', unsafe_allow_html=True)
 
 tab1, tab2, tab3, tab4 = st.tabs(["📍 行きたい", "📅 予定一覧", "🗓️ カレンダー", "🚫 NG日"])
 
-# --- タブ1: 行きたい (編集・URL復元) ---
+# --- タブ1: 行きたい (コメントを左に、編集を右に入れ替え) ---
 with tab1:
-    with st.expander("＋ 追加"):
+    with st.expander("＋ 新しい場所を追加"):
         t = st.text_input("場所/内容", key="input_title_wish")
         u = st.text_input("URL (任意)", key="input_url_wish")
         wt = time_selector_ui("wish_add")
         if st.button("リストに追加", type="primary"):
             if t:
-                get_events_ref().add({"roomKey": room_key, "title": t, "url": u, "status": "wishlist", "comments": [], "time": wt, "createdAt": get_jst_now().isoformat()})
-                st.rerun()
+                get_events_ref().add({"roomKey": room_key, "title": t, "url": u, "status": "wishlist", "comments": [], "time": wt, "createdAt": get_jst_now().isoformat()}); st.rerun()
     
     wish_items = [e for e in events if e.get("status") == "wishlist"]
     for item in sorted(wish_items, key=get_latest_activity_time, reverse=True):
@@ -269,22 +239,15 @@ with tab1:
             if item.get("time"): st.markdown(f"<span class='time-badge'>⏰ {item['time']}</span>", unsafe_allow_html=True)
             render_thread_info(item)
             
-            c_edit, c_msg = st.columns(2)
-            with c_edit:
-                with st.expander("📝 項目を編集・削除"):
-                    et = st.text_input("場所/内容", value=item['title'], key=f"etw_{item['id']}")
-                    eu = st.text_input("URL", value=item.get('url',''), key=f"euw_{item['id']}")
-                    if st.button("更新保存", key=f"ubw_{item['id']}", use_container_width=True):
-                        get_events_ref().document(item['id']).update({"title": et, "url": eu}); st.rerun()
-                    if st.button("🗑️ この項目を削除", key=f"dbw_{item['id']}", use_container_width=True):
-                        get_events_ref().document(item['id']).delete(); st.rerun()
+            # --- ここでカラム順を入れ替え ---
+            c_msg, c_edit = st.columns(2) 
             
-            with c_msg:
+            with c_msg: # 左側：コメントと確定
                 with st.expander("💬 コメント・確定"):
                     for c in sorted(item.get("comments", []), key=lambda x: x.get('createdAt', '')):
                         c_user = c.get('userName', '不明'); c_color = st.session_state.room_user_colors.get(c_user, "#999999")
                         st.markdown(f'<div style="font-size: 0.9em; margin-bottom: 5px;"><span style="color: {c_color}; font-weight: bold;">{c_user}</span>: {c.get("text", "")}</div>', unsafe_allow_html=True)
-                    c_col1, c_col2 = st.columns([4, 1])
+                    c_col1, c_col2 = st.columns([3, 1])
                     new_c = c_col1.text_input("コメント", key=f"nc_{item['id']}", label_visibility="collapsed")
                     if c_col2.button("送信", key=f"ncb_{item['id']}", use_container_width=True):
                         if new_c:
@@ -293,8 +256,18 @@ with tab1:
                     st.divider()
                     st.write("📅 予定を確定する")
                     sd, st_time = st.date_input("確定日", value=today_jst, key=f"sd_{item['id']}"), time_selector_ui(f"fix_{item['id']}")
-                    if st.button("カレンダーへ移動", key=f"fbtn_{item['id']}", use_container_width=True):
+                    if st.button("カレンダーへ確定", key=f"fbtn_{item['id']}", use_container_width=True):
                         get_events_ref().document(item['id']).update({"status": "scheduled", "date": str(sd), "time": st_time}); st.rerun()
+
+            with c_edit: # 右側：編集と削除
+                with st.expander("📝 項目を編集・削除"):
+                    et = st.text_input("名称修正", value=item['title'], key=f"etw_{item['id']}")
+                    eu = st.text_input("URL修正", value=item.get('url',''), key=f"euw_{item['id']}")
+                    if st.button("更新を保存", key=f"ubw_{item['id']}", use_container_width=True):
+                        get_events_ref().document(item['id']).update({"title": et, "url": eu}); st.rerun()
+                    st.write("---")
+                    if st.button("🗑️ この場所を削除", key=f"dbw_{item['id']}", use_container_width=True):
+                        get_events_ref().document(item['id']).delete(); st.rerun()
 
 # --- タブ2: 予定一覧 ---
 with tab2:
@@ -303,19 +276,17 @@ with tab2:
         with st.container(border=True):
             st.write(f"📅 {item['date']} {item.get('time','')}")
             st.markdown(f"**{item['title']}**")
-            col_edit, col_del = st.columns(2)
-            with col_edit:
-                with st.expander("📝 編集"):
-                    new_title = st.text_input("内容", value=item['title'], key=f"edit_t_{item['id']}")
-                    new_date = st.date_input("日付", value=datetime.strptime(item['date'], "%Y-%m-%d").date(), key=f"edit_d_{item['id']}")
-                    new_time = time_selector_ui(f"edit_tm_{item['id']}", default_val=item.get('time', 'カスタム'))
-                    if st.button("更新保存", key=f"save_{item['id']}", use_container_width=True):
-                        get_events_ref().document(item['id']).update({"title": new_title, "date": str(new_date), "time": new_time}); st.rerun()
-            with col_del:
-                if st.button("🗑️ 削除", key=f"del_{item['id']}", use_container_width=True):
+            with st.expander("📝 編集・削除"):
+                new_title = st.text_input("内容", value=item['title'], key=f"edit_t_{item['id']}")
+                new_date = st.date_input("日付", value=datetime.strptime(item['date'], "%Y-%m-%d").date(), key=f"edit_d_{item['id']}")
+                new_time = time_selector_ui(f"edit_tm_{item['id']}", default_val=item.get('time', 'カスタム'))
+                c_u, c_d = st.columns(2)
+                if c_u.button("更新", key=f"save_{item['id']}", use_container_width=True):
+                    get_events_ref().document(item['id']).update({"title": new_title, "date": str(new_date), "time": new_time}); st.rerun()
+                if c_d.button("🗑️ 削除", key=f"del_{item['id']}", use_container_width=True):
                     get_events_ref().document(item['id']).delete(); st.rerun()
 
-# --- タブ3: カレンダー (天気と家計簿修正機能付) ---
+# --- タブ3: カレンダー ---
 with tab3:
     finances = [{"id": d.id, **d.to_dict()} for d in get_finances_ref().where("roomKey", "==", room_key).stream()]
     cm1, cm2, cm3 = st.columns([1, 2, 1])
@@ -325,8 +296,7 @@ with tab3:
     
     cal_html = '<div class="cal-grid">'
     for w in ["月", "火", "水", "木", "金", "土", "日"]: cal_html += f'<div class="cal-header-item">{w}</div>'
-    cal_obj = calendar.Calendar(firstweekday=0)
-    month_days = cal_obj.monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
+    month_days = calendar.Calendar(0).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
     for week in month_days:
         for day in week:
             if day == 0: cal_html += '<div></div>'
@@ -343,9 +313,9 @@ with tab3:
                 cal_html += f'<div class="cal-box {"cal-today" if this_date == today_jst else ""}">{inner}</div>'
     st.markdown(cal_html + '</div>', unsafe_allow_html=True)
 
-    # --- 共有貯金・家計簿エリア ---
+    # --- 家計簿エリア ---
     st.divider()
-    with st.expander("💰 共有貯金・使ったお金の記録", expanded=False):
+    with st.expander("💰 共有貯金・家計簿 (修正・削除もこちら)", expanded=False):
         room_doc = get_rooms_ref().document(room_key).get()
         f_settings = room_doc.to_dict().get("finance_settings", {}) if room_doc.exists else {}
         f_start_date = f_settings.get("start_date", str(today_jst.replace(day=1)))
@@ -358,43 +328,42 @@ with tab3:
                 try: target_date = curr.replace(day=f_add_day)
                 except ValueError: target_date = curr.replace(day=28)
                 if start_dt <= target_date <= today_jst: total_added += f_amount
-                if curr.month == 12: curr = curr.replace(year=curr.year+1, month=1)
-                else: curr = curr.replace(month=curr.month+1)
+                curr = (curr + timedelta(days=32)).replace(day=1)
         
         total_expense = sum([f['amount'] for f in finances]); current_balance = total_added - total_expense
         st.markdown(f"<h3 style='color: #10b981;'>現在の残高: ¥{current_balance:,}</h3>", unsafe_allow_html=True)
         
         fc1, fc2 = st.columns(2)
         with fc1:
-            st.markdown("**支出を入力する**")
+            st.markdown("**支出を記録**")
             ex_date = st.date_input("使った日", value=today_jst, key="ex_date")
-            ex_amount = st.number_input("金額 (円)", min_value=0, step=100, key="ex_amount")
-            ex_memo = st.text_input("メモ (任意)", key="ex_memo")
-            if st.button("支出を記録", use_container_width=True):
+            ex_amount = st.number_input("金額", min_value=0, step=100, key="ex_amount")
+            ex_memo = st.text_input("メモ", key="ex_memo")
+            if st.button("記録する", use_container_width=True):
                 if ex_amount > 0:
                     get_finances_ref().add({"roomKey": room_key, "date": str(ex_date), "amount": ex_amount, "memo": ex_memo, "createdAt": get_jst_now().isoformat()}); st.rerun()
         with fc2:
-            st.markdown("**自動積立設定**")
-            set_start = st.date_input("積立開始日", value=datetime.strptime(f_start_date, "%Y-%m-%d").date(), key="set_start")
-            set_day = st.number_input("加算日", min_value=1, max_value=28, value=f_add_day, key="set_day")
-            set_amount = st.number_input("積立額", min_value=0, step=1000, value=f_amount, key="set_amount")
+            st.markdown("**積立設定**")
+            set_start = st.date_input("開始日", value=datetime.strptime(f_start_date, "%Y-%m-%d").date(), key="set_start")
+            set_day = st.number_input("毎月の加算日", 1, 28, value=f_add_day, key="set_day")
+            set_amount = st.number_input("毎月の積立額", 0, step=1000, value=f_amount, key="set_amount")
             if st.button("設定保存", use_container_width=True):
                 get_rooms_ref().document(room_key).set({"finance_settings": {"start_date": str(set_start), "add_day": set_day, "monthly_amount": set_amount}}, merge=True); st.rerun()
                 
-        st.markdown("**支出の履歴・修正・削除**")
+        st.markdown("**支出の履歴・修正**")
         for f in sorted(finances, key=lambda x: x['date'], reverse=True):
             with st.expander(f"💸 {f['date']} : -{f['amount']:,}円 ({f.get('memo', 'メモなし')})"):
-                ed = st.date_input("日付を修正", value=datetime.strptime(f['date'], "%Y-%m-%d").date(), key=f"edf_{f['id']}")
-                ea = st.number_input("金額を修正", value=f['amount'], step=100, key=f"eaf_{f['id']}")
-                em = st.text_input("メモを修正", value=f.get('memo',''), key=f"emf_{f['id']}")
+                ed = st.date_input("日付修正", value=datetime.strptime(f['date'], "%Y-%m-%d").date(), key=f"edf_{f['id']}")
+                ea = st.number_input("金額修正", value=f['amount'], step=100, key=f"eaf_{f['id']}")
+                em = st.text_input("メモ修正", value=f.get('memo',''), key=f"emf_{f['id']}")
                 col_u, col_d = st.columns(2)
-                if col_u.button("内容を更新", key=f"ubf_{f['id']}", use_container_width=True):
+                if col_u.button("更新", key=f"ubf_{f['id']}", use_container_width=True):
                     get_finances_ref().document(f['id']).update({"date": str(ed), "amount": ea, "memo": em}); st.rerun()
-                if col_d.button("🗑️ 削除する", key=f"dbf_{f['id']}", use_container_width=True):
+                if col_d.button("削除", key=f"dbf_{f['id']}", use_container_width=True):
                     get_finances_ref().document(f['id']).delete(); st.rerun()
 
 # --- タブ4: NG日 ---
 with tab4:
     nd, nt = st.date_input("日付", value=today_jst, key="ng_in"), time_selector_ui("ng_time_in")
-    if st.button("登録する", type="primary", use_container_width=True):
+    if st.button("NG登録", type="primary", use_container_width=True):
         get_ng_ref().add({"roomKey": room_key, "userName": user_name, "date": str(nd), "time": nt, "createdAt": get_jst_now().isoformat()}); st.rerun()
