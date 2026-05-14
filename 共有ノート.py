@@ -381,10 +381,10 @@ with tab3:
 
     # 3. カレンダーHTMLの構築
     cal_html = '<div class="cal-grid">'
-    for w in ["月", "火", "水", "木", "金", "土", "日"]: 
+    for w in ["日", "月", "火", "水", "木", "金", "土"]:
         cal_html += f'<div class="cal-header-item">{w}</div>'
     
-    month_days = calendar.Calendar(0).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
+    month_days = calendar.Calendar(6).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
     
     for week in month_days:
         for day in week:
