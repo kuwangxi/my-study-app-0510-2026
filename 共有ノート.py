@@ -124,68 +124,28 @@ def get_shinjuku_weather():
 
 weather_data = get_shinjuku_weather()
 
-# CSS
-# CSS
 st.markdown(f"""
 <style>
     html, body, [class*="st-"] {{ font-size: {st.session_state.font_size}px !important; }}
     .cal-grid {{ display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; width: 100%; margin-top: 10px; }}
     .cal-header-item {{ text-align: center; font-weight: bold; font-size: 0.8em; padding: 5px 0; background-color: var(--secondary-background-color); color: var(--text-color); border-radius: 4px; }}
-    
-    /* カレンダーの1日ごとの枠 (aタグを箱として扱う) */
-    a.cal-box {{ 
-        border: 1px solid rgba(128, 128, 128, 0.3); 
-        border-radius: 4px; 
-        padding: 4px; 
-        min-height: 90px; 
-        background-color: var(--background-color); 
-        position: relative; 
-        display: block;
-        text-decoration: none !important; /* リンクの下線を消す */
-        color: inherit !important;
-        overflow: hidden; 
-        transition: 0.2s;
-    }}
-    
-    /* タップ(ホバー)した時の反応 */
-    a.cal-box:hover {{
-        border-color: {st.session_state.user_color};
-        background-color: rgba(128, 128, 128, 0.05);
-    }}
-
-    .cal-date {{ font-size: 0.8em; font-weight: bold; margin-bottom: 2px; color: var(--text-color); position: relative; z-index: 2; }}
+    .cal-box {{ border: 1px solid rgba(128, 128, 128, 0.3); border-radius: 4px; padding: 4px; min-height: 85px; background-color: var(--background-color); position: relative; overflow-y: auto; }}
+    .cal-date {{ font-size: 0.8em; font-weight: bold; margin-bottom: 2px; color: var(--text-color); }}
     .cal-today {{ border: 2px solid {st.session_state.user_color} !important; background-color: var(--secondary-background-color) !important; }}
-    
-    /* 背景の天気・気温・風の情報をなじませる */
-    .cal-bg-info {{
-        position: absolute;
-        top: 0; left: 0; width: 100%; height: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        opacity: 0.2; /* ★ここを小さくするともっと薄くなります */
-        pointer-events: none; /* 下の階層へのクリックを邪魔しない */
-        z-index: 0;
-    }}
-    .bg-weather-mark {{ font-size: 2.5em; line-height: 1; margin-bottom: 2px; }}
-    .bg-temp {{ font-size: 0.7em; font-weight: bold; color: var(--text-color); line-height: 1.2; text-align: center; }}
-    .bg-wind {{ font-size: 0.65em; font-weight: bold; color: var(--text-color); }}
-
-    /* 予定のドットなどは背景より手前に表示 */
-    .cal-content {{ position: relative; z-index: 1; }}
-
     .cal-dot {{ font-size: 0.7em; margin-bottom: 1px; border-radius: 2px; padding: 1px 2px; line-height: 1.1; }}
     .event-dot {{ background-color: rgba(59, 130, 246, 0.2) !important; color: #60a5fa !important; }}
+    .period-dot {{ background-color: transparent !important; color: #f43f5e; border: none !important; font-weight: bold; font-size: 1.1em; }}
+    .ovulation-dot {{ background-color: transparent !important; color: #a855f7; border: none !important; font-weight: bold; font-size: 1.1em; }}
+    .pms-dot {{ background-color: transparent !important; color: #eab308; border: none !important; font-weight: bold; font-size: 1.1em; }}
+    .fertility-dot {{ background-color: transparent !important; color: #22c55e; border: none !important; font-weight: bold; font-size: 1.1em; }}
     .ng-dot {{ background: repeating-linear-gradient(45deg, rgba(128, 128, 128, 0.1), rgba(128, 128, 128, 0.1) 5px, rgba(150, 150, 150, 0.2) 5px, rgba(150, 150, 150, 0.2) 10px); color: var(--text-color); border: 1px solid rgba(128, 128, 128, 0.3); }}
-    .expense-dot {{ background-color: transparent !important; color: #ef4444; border: none !important; font-weight: bold; font-size: 0.75em; text-align: right; }}
-    
     .last-comment {{ font-size: 0.85em; border-left: 4px solid; padding-left: 10px; margin-top: 10px; margin-bottom: 10px; line-height: 1.4; }}
     .time-badge {{ background-color: rgba(128, 128, 128, 0.2); padding: 2px 6px; border-radius: 4px; font-size: 0.8em; }}
+    .weather-bg {{ position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 3em; opacity: 0.15; pointer-events: none; z-index: 0; }}
+    .expense-dot {{ background-color: transparent !important; color: #ef4444; border: none !important; font-weight: bold; font-size: 0.75em; text-align: right; }}
     .memo-text {{ font-size: 0.85em; color: gray; margin-bottom: 5px; background: rgba(128, 128, 128, 0.05); padding: 5px; border-radius: 4px; }}
 </style>
 """, unsafe_allow_html=True)
-
 # ==========================================
 # 2. ログイン処理
 # ==========================================
