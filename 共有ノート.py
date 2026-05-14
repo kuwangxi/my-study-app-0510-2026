@@ -359,62 +359,80 @@ with tab2:
 
 # --- タブ3: カレンダー ---
 with tab3:
+    # 1. データの準備（予定を時間順にソート）
+    # 時間が入っていない予定は後ろにくるようにします
+    sorted_events = sorted(events, key=lambda x: x.get("time", "23:59"))
     finances = [{"id": d.id, **d.to_dict()} for d in get_finances_ref().where("roomKey", "==", room_key).stream()]
+    
+    # 選択された日付を保持する状態
+    if "selected_date_str" not in st.session_state:
+        st.session_state.selected_date_str = str(today_jst)
+
+    # 2. 月移動ヘッダー
     cm1, cm2, cm3 = st.columns([1, 2, 1])
-    if cm1.button("◀ 前月"): st.session_state.current_month = (st.session_state.current_month - timedelta(days=1)).replace(day=1); st.rerun()
+    if cm1.button("◀ 前月", key="prev_month"): 
+        st.session_state.current_month = (st.session_state.current_month - timedelta(days=1)).replace(day=1)
+        st.rerun()
     cm2.markdown(f"<center><h3>{st.session_state.current_month.strftime('%Y年 %m月')}</h3></center>", unsafe_allow_html=True)
-    if cm3.button("次月 ▶"): st.session_state.current_month = (st.session_state.current_month + timedelta(days=32)).replace(day=1); st.rerun()
-    
-    cal_html = '<div class="cal-grid">'
-    for w in ["月", "火", "水", "木", "金", "土", "日"]: cal_html += f'<div class="cal-header-item">{w}</div>'
+    if cm3.button("次月 ▶", key="next_month"): 
+        st.session_state.current_month = (st.session_state.current_month + timedelta(days=32)).replace(day=1)
+        st.rerun()
+
+    # 3. カレンダーの描画（タップ可能）
+    # 曜日のヘッダー
+    cols = st.columns(7)
+    weekdays = ["月", "火", "水", "木", "金", "土", "日"]
+    for i, w in enumerate(weekdays):
+        cols[i].markdown(f"<center><b>{w}</b></center>", unsafe_allow_html=True)
+
+    # 日付ボタンの配置
     month_days = calendar.Calendar(0).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
-    for week in month_days:
-        for day in week:
-            if day == 0: cal_html += '<div></div>'
-            else:
-                this_date = st.session_state.current_month.replace(day=day); date_str = str(this_date)
-                inner = f'<div class="cal-date">{day}</div>'
-                w_mark = weather_data.get(date_str, ""); 
-                if w_mark: inner += f'<div class="weather-bg">{w_mark}</div>'
-                for p_type, p_label in period_dates.get(date_str, []): inner += f'<div class="cal-dot {p_type}-dot">{p_label}</div>'
-                # 予定を時間順に並び替えてから表示
-                day_events = sorted([e for e in events if e.get("date") == date_str], key=lambda x: x.get("time", ""))
-                for e in day_events: 
-                    # 時間も一緒に表示するとより分かりやすくなります
-                    time_prefix = f"{e['time']} " if e.get('time') else ""
-                    inner += f'<div class="cal-dot event-dot">📍 {time_prefix}{e["title"]}</div>'
-                for n in [n for n in ng_dates if n.get("date") == date_str]: inner += f'<div class="cal-dot ng-dot">🚫 {n.get("userName")}</div>'
-                day_expenses = [f['amount'] for f in finances if f.get('date') == date_str]
-                if day_expenses: inner += f'<div class="cal-dot expense-dot">💸 -{sum(day_expenses):,}円</div>'
-                cal_html += f'<div class="cal-box {"cal-today" if this_date == today_jst else ""}">{inner}</div>'
-    st.markdown(cal_html + '</div>', unsafe_allow_html=True)
-    # --- 選択した日の詳細表示エリア ---
-    st.divider()
-    st.subheader("🔍 日ごとの詳細確認")
     
-    # カレンダーをタップする代わりとして、日付選択を用意します
-    selected_date = st.date_input("詳細を見たい日を選択してください", value=today_jst, key="cal_detail_date")
-    sel_date_str = str(selected_date)
+    for week in month_days:
+        cols = st.columns(7)
+        for i, day in enumerate(week):
+            if day == 0:
+                cols[i].write("") # 空白
+            else:
+                this_date = st.session_state.current_month.replace(day=day)
+                date_str = str(this_date)
+                
+                # アイコンの準備
+                icons = ""
+                if any(e.get("date") == date_str for e in events): icons += "📍"
+                if any(f.get("date") == date_str for f in finances): icons += "💸"
+                if any(n.get("date") == date_str for n in ng_dates): icons += "🚫"
+                
+                # ボタンとして日付を表示（タップ可能）
+                # 今日の場合は枠線を変えるなどの装飾
+                btn_label = f"{day}\n{icons}"
+                if cols[i].button(btn_label, key=f"btn_{date_str}", use_container_width=True):
+                    st.session_state.selected_date_str = date_str # タップで日付を保存
+                    st.rerun()
+
+    # 4. 💡【タップした日の詳細表示エリア】
+    st.divider()
+    sel_date = st.session_state.selected_date_str
+    st.subheader(f"📅 {sel_date} の詳細")
     
     with st.container(border=True):
-        st.markdown(f"### 📅 {sel_date_str} の詳細")
-        
-        # 1. 予定（時間順）
-        day_events = sorted([e for e in events if e.get("date") == sel_date_str], key=lambda x: x.get("time", ""))
+        # A. 予定（時間順に並べて表示）
+        day_events = [e for e in sorted_events if e.get("date") == sel_date]
         if day_events:
             st.markdown("**🚀 予定**")
             for e in day_events:
-                st.info(f"【{e.get('time', '時間未定')}】 {e['title']}")
+                time_str = f"【{e['time']}】" if e.get('time') else "【終日】"
+                st.info(f"{time_str} {e['title']}")
         
-        # 2. NG日（誰がダメか）
-        day_ngs = [n for n in ng_dates if n.get("date") == sel_date_str]
+        # B. NG日
+        day_ngs = [n for n in ng_dates if n.get("date") == sel_date]
         if day_ngs:
-            st.markdown("**🚫 NG（予定あり）な人**")
+            st.markdown("**🚫 予定あり（NG）**")
             for n in day_ngs:
-                st.warning(f"{n.get('userName', '不明')} さん")
-                
-        # 3. 支出（家計簿）
-        day_fin = [f for f in finances if f.get('date') == sel_date_str]
+                st.warning(f"{n.get('userName')} さん")
+
+        # C. 支出
+        day_fin = [f for f in finances if f.get('date') == sel_date]
         if day_fin:
             st.markdown("**💸 支出記録**")
             for f in day_fin:
@@ -422,6 +440,10 @@ with tab3:
         
         if not day_events and not day_ngs and not day_fin:
             st.write("この日の記録はありません。")
+
+    # --- 家計簿エリア（既存のコード） ---
+    st.divider()
+    # ...（以下、元の「💰 共有貯金」のコードに続く）
 
     # --- 家計簿エリア ---
     st.divider()
