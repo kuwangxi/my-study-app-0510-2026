@@ -444,6 +444,13 @@ with tab3:
                     inner += f'<div style="font-size:0.6em; color:gray; position:relative; z-index:1;">{w_wind}</div>'
                 
                 # 各種ドット
+                # --- 生理予定・排卵予定の表示を追加 ---
+                if date_str in period_dates:
+                    for p_type, p_mark in period_dates[date_str]:
+                        if p_type == "period":
+                            inner += f'<div class="cal-dot" style="color: #f43f5e;">{p_mark} 生理予定日</div>'
+                        elif p_type == "ovulation":
+                            inner += f'<div class="cal-dot" style="color: #fbbf24;">{p_mark} 排卵予定日</div>'
                 for e in [e for e in events if e.get("date") == date_str]:
                     inner += f'<div class="cal-dot event-dot">📍 {e["title"]}</div>'
                 for n in [n for n in ng_dates if n.get("date") == date_str]:
