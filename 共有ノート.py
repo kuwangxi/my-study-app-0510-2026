@@ -368,35 +368,36 @@ with tab2:
 
 # --- タブ3: カレンダー ---
 with tab3:
+    # 予定を時間順にソート
     sorted_events = sorted(events, key=lambda x: str(x.get("time") or "23:59"))
+    
+    # 家計簿データの取得
     finances = [{"id": d.id, **d.to_dict()} for d in get_finances_ref().where("roomKey", "==", room_key).stream()]
     
-    # 💡 【追加】詳細表示用の状態管理フラグ
+    # 選択された日付を保持する状態（未設定なら今日）
     if "selected_date_str" not in st.session_state:
         st.session_state.selected_date_str = str(today_jst)
-    if "show_details" not in st.session_state:
-        st.session_state.show_details = False # 初期状態は非表示
 
-    # 2. 月移動ヘッダー
+    # 1. 月移動ヘッダー
     cm1, cm2, cm3 = st.columns([1, 2, 1])
-    if cm1.button("◀ 前月", key="prev_m"): 
+    if cm1.button("◀ 前月", key="prev_month"): 
         st.session_state.current_month = (st.session_state.current_month - timedelta(days=1)).replace(day=1)
         st.rerun()
     cm2.markdown(f"<center><h3>{st.session_state.current_month.strftime('%Y年 %m月')}</h3></center>", unsafe_allow_html=True)
-    if cm3.button("次月 ▶", key="next_m"): 
+    if cm3.button("次月 ▶", key="next_month"): 
         st.session_state.current_month = (st.session_state.current_month + timedelta(days=32)).replace(day=1)
         st.rerun()
 
-    # 3. カレンダーの描画（タップ可能にするため HTML ではなく st.button を使用）
+    # 2. カレンダーの描画（横7列・タップ可能）
     weekdays = ["月", "火", "水", "木", "金", "土", "日"]
     header_cols = st.columns(7)
     for i, w in enumerate(weekdays):
         header_cols[i].markdown(f"<center><b>{w}</b></center>", unsafe_allow_html=True)
-    
+
     month_days = calendar.Calendar(0).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
     
     for week in month_days:
-        cols = st.columns(7) # 横7列のグリッドを作成
+        cols = st.columns(7) # ここで横7列を確保
         for i, day in enumerate(week):
             if day == 0:
                 cols[i].write("") # 月外の日付は空白
@@ -404,66 +405,59 @@ with tab3:
                 this_date = st.session_state.current_month.replace(day=day)
                 date_str = str(this_date)
                 
-                # 天気データの取得
+                # --- 天気・風速の取得 ---
                 w_info = weather_data.get(date_str, {"mark": "", "wind": ""})
                 w_mark = w_info["mark"]
+                w_wind = w_info["wind"]
                 
-                # ドット（アイコン）の集計
+                # アイコンの準備
                 icons = ""
                 if any(e.get("date") == date_str for e in events): icons += "📍"
-                if any(n.get("date") == date_str for n in ng_dates): icons += "🚫"
                 if any(f.get("date") == date_str for f in finances): icons += "💸"
+                if any(n.get("date") == date_str for n in ng_dates): icons += "🚫"
                 
-                # ボタンのラベル（改行で情報をまとめる）
-                btn_label = f"{day} {w_mark}\n{icons}"
+                # ボタンのラベル（日付 + 天気 + アイコン + 風速）
+                # 改行を使ってコンパクトにまとめます
+                display_label = f"{day} {w_mark}\n{icons}\n{w_wind}"
                 
-                # 💡 【修正】日付ボタン本体（タップするとフラグをTrueにして再描画）
-                if cols[i].button(btn_label, key=f"btn_{date_str}", use_container_width=True):
-                    st.session_state.selected_date_str = date_str
-                    st.session_state.show_details = True # 詳細を表示する
+                # 今日の日付は目立たせる
+                is_today = (this_date == today_jst)
+                
+                # 日付ボタン本体
+                if cols[i].button(display_label, key=f"btn_{date_str}", use_container_width=True):
+                    st.session_state.selected_date_str = date_str # タップで日付を更新
                     st.rerun()
 
-    # 4. 💡【タップした日の詳細表示エリア】
+    # 3. 💡【タップした日の詳細表示エリア】（元の機能を完全維持）
     st.divider()
+    sel_date = st.session_state.selected_date_str
+    st.subheader(f"📅 {sel_date} の詳細")
     
-    # show_detailsフラグがTrueの時だけ、このブロックを表示する
-    if st.session_state.show_details:
-        sel_str = st.session_state.selected_date_str
+    with st.container(border=True):
+        # A. 予定
+        day_events = [e for e in sorted_events if e.get("date") == sel_date]
+        if day_events:
+            st.markdown("**🚀 予定**")
+            for e in day_events:
+                time_str = f"【{e['time']}】" if e.get('time') else "【終日】"
+                st.info(f"{time_str} {e['title']}")
         
-        with st.container(border=True):
-            # ヘッダーと「閉じる」ボタンを横並びに配置
-            head_col1, head_col2 = st.columns([4, 1])
-            head_col1.markdown(f"### 📅 {sel_str} の詳細")
-            
-            # 閉じるボタン（タップするとフラグをFalseにして再描画）
-            if head_col2.button("✖ 閉じる", key="close_details"):
-                st.session_state.show_details = False
-                st.rerun()
+        # B. NG日
+        day_ngs = [n for n in ng_dates if n.get("date") == sel_date]
+        if day_ngs:
+            st.markdown("**🚫 予定あり（NG）**")
+            for n in day_ngs:
+                st.warning(f"{n.get('userName')} さん")
 
-            # A. 予定
-            day_events = [e for e in sorted_events if e.get("date") == sel_str]
-            if day_events:
-                st.markdown("**🚀 予定**")
-                for e in day_events:
-                    time_str = f"【{e.get('time') or '終日'}】"
-                    st.info(f"{time_str} {e['title']}")
-            
-            # B. NG日
-            day_ngs = [n for n in ng_dates if n.get("date") == sel_str]
-            if day_ngs:
-                st.markdown("**🚫 予定あり（NG）**")
-                for n in day_ngs:
-                    st.warning(f"{n.get('userName')} さん")
-
-            # C. 支出
-            day_expenses = [f for f in finances if f.get('date') == sel_str]
-            if day_expenses:
-                st.markdown("**💸 支出記録**")
-                for f in day_expenses:
-                    st.error(f"{f['amount']:,}円 （{f.get('memo', 'メモなし')}）")
-            
-            if not day_events and not day_ngs and not day_expenses:
-                st.write("この日の記録はありません。")
+        # C. 支出
+        day_fin = [f for f in finances if f.get('date') == sel_date]
+        if day_fin:
+            st.markdown("**💸 支出記録**")
+            for f in day_fin:
+                st.error(f"{f['amount']:,}円 （{f.get('memo', 'メモなし')}）")
+        
+        if not day_events and not day_ngs and not day_fin:
+            st.write("この日の記録はありません。")
 
     # --- 家計簿エリア ---
     st.divider()
