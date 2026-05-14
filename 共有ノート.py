@@ -96,33 +96,29 @@ def time_selector_ui(key_prefix, default_val="カスタム"):
 @st.cache_data(ttl=3600)
 def get_shinjuku_weather():
     try:
-        # dailyに温度(最高/最低)を追加
-        url = "https://api.open-meteo.com/v1/forecast?latitude=35.6895&longitude=139.7005&daily=weathercode,windspeed_10m_max,temperature_2m_max,temperature_2m_min&timezone=Asia%2FTokyo&past_days=7&forecast_days=14"
+        # 新宿の正確な位置：緯度35.6895, 経度139.7005
+        url = "https://api.open-meteo.com/v1/forecast?latitude=35.6895&longitude=139.7005&daily=weathercode,windspeed_10m_max&timezone=Asia%2FTokyo&past_days=7&forecast_days=14"
         res = requests.get(url).json()
         w_map = {}
-        
         for i, date_str in enumerate(res['daily']['time']):
             code = res['daily']['weathercode'][i]
             wind = res['daily']['windspeed_10m_max'][i]
-            t_max = res['daily']['temperature_2m_max'][i]
-            t_min = res['daily']['temperature_2m_min'][i]
             
-            # 天気アイコンと詳細テキスト
-            if code in [0, 1]: mark, desc = "☀️", "晴れ"
-            elif code in [2, 3]: mark, desc = "☁️", "曇り"
-            elif code in [45, 48]: mark, desc = "🌫️", "霧"
-            elif code in [51,53,55,56,57,61,63,65,66,67,80,81,82]: mark, desc = "☔", "雨"
-            elif code in [71,73,75,77,85,86]: mark, desc = "⛄", "雪"
-            elif code in [95,96,99]: mark, desc = "⚡", "雷雨"
-            else: mark, desc = "", "不明"
+            # 天気アイコン
+            if code in [0, 1]: mark = "☀️"
+            elif code in [2, 3]: mark = "☁️"
+            elif code in [45, 48]: mark = "🌫️"
+            elif code in [51,53,55,56,57,61,63,65,66,67,80,81,82]: mark = "☔"
+            elif code in [71,73,75,77,85,86]: mark = "⛄"
+            elif code in [95,96,99]: mark = "⚡"
+            else: mark = ""
 
-            w_map[date_str] = {
-                "mark": mark, 
-                "desc": desc,
-                "wind": round(wind, 1), 
-                "t_max": round(t_max), 
-                "t_min": round(t_min)
-            }
+            # 風の表示
+            wind_info = ""
+            if wind >= 20.0: wind_info = f"🚩強風({int(wind)})"
+            elif wind >= 10.0: wind_info = f"🍃風({int(wind)})"
+            
+            w_map[date_str] = {"mark": mark, "wind": wind_info}
         return w_map
     except: return {}
 
@@ -131,56 +127,24 @@ weather_data = get_shinjuku_weather()
 # CSS
 st.markdown(f"""
 <style>
-    /* （既存のスタイル群...） */
     html, body, [class*="st-"] {{ font-size: {st.session_state.font_size}px !important; }}
     .cal-grid {{ display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; width: 100%; margin-top: 10px; }}
     .cal-header-item {{ text-align: center; font-weight: bold; font-size: 0.8em; padding: 5px 0; background-color: var(--secondary-background-color); color: var(--text-color); border-radius: 4px; }}
-    
-    /* aタグによるリンク装飾を無効化し、ホバー時のアクションを追加 */
-    a.cal-box {{ 
-        border: 1px solid rgba(128, 128, 128, 0.3); 
-        border-radius: 4px; 
-        padding: 4px; 
-        min-height: 85px; 
-        background-color: var(--background-color); 
-        position: relative; 
-        display: block;
-        text-decoration: none !important;
-        color: inherit !important;
-        overflow: hidden; /* 背景がはみ出さないように */
-        transition: 0.2s;
-    }}
-    a.cal-box:hover {{
-        border-color: #60a5fa;
-        background-color: rgba(96, 165, 250, 0.05);
-    }}
-
+    .cal-box {{ border: 1px solid rgba(128, 128, 128, 0.3); border-radius: 4px; padding: 4px; min-height: 85px; background-color: var(--background-color); position: relative; overflow-y: auto; }}
     .cal-date {{ font-size: 0.8em; font-weight: bold; margin-bottom: 2px; color: var(--text-color); }}
     .cal-today {{ border: 2px solid {st.session_state.user_color} !important; background-color: var(--secondary-background-color) !important; }}
-    
-    /* 背景用コンテナ（ここで全てを半透明にして背面になじませる） */
-    .cal-bg-info {{
-        position: absolute;
-        top: 0; left: 0; width: 100%; height: 100%;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        opacity: 0.15; /* 薄さの調整はここで行います */
-        pointer-events: none; /* タップの邪魔にならないようにする */
-        z-index: 0;
-    }}
-    .bg-weather-mark {{ font-size: 2.5em; line-height: 1; margin-bottom: 2px; }}
-    .bg-temp {{ font-size: 0.75em; font-weight: bold; color: var(--text-color); line-height: 1.2; }}
-    .bg-wind {{ font-size: 0.7em; font-weight: bold; color: var(--text-color); }}
-
-    /* スケジュールなどは背景より手前(z-index:1)に配置 */
-    .cal-content {{ position: relative; z-index: 1; height: 100%; }}
-
     .cal-dot {{ font-size: 0.7em; margin-bottom: 1px; border-radius: 2px; padding: 1px 2px; line-height: 1.1; }}
     .event-dot {{ background-color: rgba(59, 130, 246, 0.2) !important; color: #60a5fa !important; }}
+    .period-dot {{ background-color: transparent !important; color: #f43f5e; border: none !important; font-weight: bold; font-size: 1.1em; }}
+    .ovulation-dot {{ background-color: transparent !important; color: #a855f7; border: none !important; font-weight: bold; font-size: 1.1em; }}
+    .pms-dot {{ background-color: transparent !important; color: #eab308; border: none !important; font-weight: bold; font-size: 1.1em; }}
+    .fertility-dot {{ background-color: transparent !important; color: #22c55e; border: none !important; font-weight: bold; font-size: 1.1em; }}
     .ng-dot {{ background: repeating-linear-gradient(45deg, rgba(128, 128, 128, 0.1), rgba(128, 128, 128, 0.1) 5px, rgba(150, 150, 150, 0.2) 5px, rgba(150, 150, 150, 0.2) 10px); color: var(--text-color); border: 1px solid rgba(128, 128, 128, 0.3); }}
+    .last-comment {{ font-size: 0.85em; border-left: 4px solid; padding-left: 10px; margin-top: 10px; margin-bottom: 10px; line-height: 1.4; }}
+    .time-badge {{ background-color: rgba(128, 128, 128, 0.2); padding: 2px 6px; border-radius: 4px; font-size: 0.8em; }}
+    .weather-bg {{ position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 3em; opacity: 0.15; pointer-events: none; z-index: 0; }}
     .expense-dot {{ background-color: transparent !important; color: #ef4444; border: none !important; font-weight: bold; font-size: 0.75em; text-align: right; }}
+    .memo-text {{ font-size: 0.85em; color: gray; margin-bottom: 5px; background: rgba(128, 128, 128, 0.05); padding: 5px; border-radius: 4px; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -417,46 +381,33 @@ with tab3:
 
     # 3. カレンダーHTMLの構築
     cal_html = '<div class="cal-grid">'
-    for w in ["日", "月", "火", "水", "木", "金", "土"]:
+    for w in ["月", "火", "水", "木", "金", "土", "日"]: 
         cal_html += f'<div class="cal-header-item">{w}</div>'
     
-    month_days = calendar.Calendar(6).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
+    month_days = calendar.Calendar(0).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
     
     for week in month_days:
-       for day in week:
+        for day in week:
             if day == 0:
                 cal_html += '<div></div>'
             else:
                 this_date = st.session_state.current_month.replace(day=day)
                 date_str = str(this_date)
                 
-                # --- 背景（天気情報）の構築 ---
-                bg_info = ""  # ← ここの行頭スペースを上の行（date_str）と揃える
-                if date_str in weather_data:
-                    w = weather_data[date_str]
-                    bg_info = f'''
-                    <div class="cal-bg-info">
-                        <div class="bg-weather-mark">{w['mark']}</div>
-                        <div class="bg-temp">
-                            <span style="color:#ff4b4b;">{w['t_max']}°</span> / 
-                            <span style="color:#3b82f6;">{w['t_min']}°</span>
-                        </div>
-                        <div class="bg-wind">💨 {w['wind']}m</div>
-                    </div>
-                    '''
-
-                # --- 表面（コンテンツ）の構築 ---
-                inner_content = f'<div class="cal-date">{day}</div>'
+                # 天気データの取得
+                w_info = weather_data.get(date_str, {"mark": "", "wind": ""})
+                w_mark = w_info["mark"]
+                w_wind = w_info["wind"]
                 
-                # 生理・排卵
-                if date_str in period_dates:
-                    for p_type, p_mark in period_dates[date_str]:
-                        color = "#f43f5e" if p_type == "period" else "#fbbf24"
-                        inner_content += f'<div class="cal-dot" style="color: {color};">{p_mark}</div>'
-
-                # （以下略... 同様にインデントを揃える）
-                        elif p_type == "ovulation":
-                            inner += f'<div class="cal-dot" style="color: #fbbf24;">{p_mark} </div>'
+                # 背景の天気画像（アイコン）
+                bg_weather = f'<div class="weather-bg">{w_mark}</div>' if w_mark else ""
+                
+                # アイコンや風情報の構築
+                inner = f'<div class="cal-date">{day}</div>{bg_weather}'
+                if w_wind:
+                    inner += f'<div style="font-size:0.6em; color:gray; position:relative; z-index:1;">{w_wind}</div>'
+                
+                # 各種ドット
                 for e in [e for e in events if e.get("date") == date_str]:
                     inner += f'<div class="cal-dot event-dot">📍 {e["title"]}</div>'
                 for n in [n for n in ng_dates if n.get("date") == date_str]:
@@ -472,39 +423,20 @@ with tab3:
     
     st.markdown(cal_html + '</div>', unsafe_allow_html=True)
 
- # 4. 詳細表示用の日付選択（タップの代わり）
+    # 4. 詳細表示用の日付選択（タップの代わり）
     st.divider()
     selected_date = st.date_input("詳細を見たい日を選択", value=today_jst)
     sel_str = str(selected_date)
     
     with st.container(border=True):
         st.markdown(f"### 📅 {sel_str} の詳細")
-        
-        # --- 1. 予定（📍）の表示 ---
         day_events = [e for e in sorted_events if e.get("date") == sel_str]
         for e in day_events:
-            st.info(f"📍 【{e.get('time') or '終日'}】 {e['title']}")
-        
-        # --- 2. NG日（🚫）の表示を追加 ---
-        day_ngs = [n for n in ng_dates if n.get("date") == sel_str]
-        for n in day_ngs:
-            memo_part = f" ： {n['memo']}" if n.get("memo") else ""
-            # 誰のNGかわかるように名前と、あればメモを表示します
-            st.error(f"🚫 【{n.get('time') or '終日'}】 {n.get('userName', '不明')} さんのNG{memo_part}")
+            st.info(f"【{e.get('time') or '終日'}】{e['title']}")
 
-        # --- 3. 生理予定（🌙）の表示（任意） ---
-        if sel_str in period_dates:
-            for p_type, p_mark in period_dates[sel_str]:
-                label = "生理予定日" if p_type == "period" else "排卵予定日"
-                st.warning(f"{p_mark} {label}")
-        
-        # 何も予定がない場合
-        if not day_events and not day_ngs and sel_str not in period_dates:
-            st.write("この日の予定やNG登録はありません。")
     # --- 家計簿エリア ---
     st.divider()
     with st.expander("💰 共有貯金", expanded=False):
-        # （以下、家計簿のコードは変更なしで継続）
         room_doc = get_rooms_ref().document(room_key).get()
         f_settings = room_doc.to_dict().get("finance_settings", {}) if room_doc.exists else {}
         f_start_date = f_settings.get("start_date", str(today_jst.replace(day=1)))
