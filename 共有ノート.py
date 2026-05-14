@@ -96,50 +96,35 @@ def time_selector_ui(key_prefix, default_val="カスタム"):
 @st.cache_data(ttl=3600)
 def get_shinjuku_weather():
     try:
-        # 気象庁の公式データ（東京）
-        url = "https://www.jma.go.jp/bosai/forecast/data/forecast/130000.json"
+        # 新宿の正確な位置：緯度35.6895, 経度139.7005
+        url = "https://api.open-meteo.com/v1/forecast?latitude=35.6895&longitude=139.7005&daily=weathercode,windspeed_10m_max&timezone=Asia%2FTokyo&past_days=7&forecast_days=14"
         res = requests.get(url).json()
-        
-        # 予報データの抽出
-        area_data = res[0]['timeSeries'][0]['areas'][0]
-        wind_texts = res[0]['timeSeries'][1]['areas'][0]['winds']
-        time_defines = res[0]['timeSeries'][0]['timeDefines']
-        
         w_map = {}
-        for i in range(len(time_defines)):
-            raw_date = time_defines[i]
-            date_str = raw_date[:10]
-            telop = area_data['weathers'][i]
-            wind_text = wind_texts[i]
+        for i, date_str in enumerate(res['daily']['time']):
+            code = res['daily']['weathercode'][i]
+            wind = res['daily']['windspeed_10m_max'][i]
             
-            # --- 天気マークの判定（優先順位をつけて判定） ---
-            if "雷" in telop:
-                mark = "⚡"
-            elif "雪" in telop:
-                mark = "⛄"
-            elif "雨" in telop:
-                mark = "☔"
-            elif "晴" in telop:
-                mark = "☀️"
-            elif "曇" in telop:
-                mark = "☁️"
-            else:
-                mark = "☁️"
+            # 天気アイコン
+            if code in [0, 1]: mark = "☀️"
+            elif code in [2, 3]: mark = "☁️"
+            elif code in [45, 48]: mark = "🌫️"
+            elif code in [51,53,55,56,57,61,63,65,66,67,80,81,82]: mark = "☔"
+            elif code in [71,73,75,77,85,86]: mark = "⛄"
+            elif code in [95,96,99]: mark = "⚡"
+            else: mark = ""
 
-            # --- 風の強さ判定 ---
-            if "強く" in wind_text or "非常に強く" in wind_text:
-                wind_display = "🚩 強風"
-            else:
-                wind_display = "🍃 弱風"
+            # 風の表示
+            wind_info = ""
+            if wind >= 20.0: wind_info = f"🚩強風({int(wind)})"
+            elif wind >= 10.0: wind_info = f"🍃風({int(wind)})"
             
-            w_map[date_str] = {"mark": mark, "wind": wind_display}
-            
+            w_map[date_str] = {"mark": mark, "wind": wind_info}
         return w_map
-    except Exception as e:
-        return {}
+    except: return {}
 
 weather_data = get_shinjuku_weather()
 
+# CSS
 st.markdown(f"""
 <style>
     html, body, [class*="st-"] {{ font-size: {st.session_state.font_size}px !important; }}
@@ -162,6 +147,7 @@ st.markdown(f"""
     .memo-text {{ font-size: 0.85em; color: gray; margin-bottom: 5px; background: rgba(128, 128, 128, 0.05); padding: 5px; border-radius: 4px; }}
 </style>
 """, unsafe_allow_html=True)
+
 # ==========================================
 # 2. ログイン処理
 # ==========================================
@@ -381,15 +367,7 @@ with tab2:
                             get_events_ref().document(item['id']).update({"status": "wishlist", "date": None}); st.rerun()
 
 # --- タブ3: カレンダー ---
-    with tab3:
-        # ここで最新の天気データを取得する（これが抜けているとエラーになります）
-        weather_data = get_shinjuku_weather() 
-
-        sorted_events = sorted(events, key=lambda x: str(x.get("time") or "23:59"))
-        # ...（中略：家計簿取得など）...
-
-        # 3. カレンダーHTMLの構築
-        cal_html = '<div class="cal-grid">' # ←これがカレンダーの「枠」です
+with tab3:
     sorted_events = sorted(events, key=lambda x: str(x.get("time") or "23:59"))
     finances = [{"id": d.id, **d.to_dict()} for d in get_finances_ref().where("roomKey", "==", room_key).stream()]
     
@@ -403,10 +381,10 @@ with tab2:
 
     # 3. カレンダーHTMLの構築
     cal_html = '<div class="cal-grid">'
-    for w in ["日", "月", "火", "水", "木", "金", "土"]:
+    for w in ["月", "火", "水", "木", "金", "土", "日"]: 
         cal_html += f'<div class="cal-header-item">{w}</div>'
     
-    month_days = calendar.Calendar(6).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
+    month_days = calendar.Calendar(0).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
     
     for week in month_days:
         for day in week:
@@ -430,12 +408,6 @@ with tab2:
                     inner += f'<div style="font-size:0.6em; color:gray; position:relative; z-index:1;">{w_wind}</div>'
                 
                 # 各種ドット
-                # 1. 生理・排卵予定の表示（ここを追加）
-                if date_str in period_dates:
-                    for p_type, p_mark in period_dates[date_str]:
-                        # CSSクラスをタイプ別に判定
-                        p_cls = "period-dot" if p_type == "period" else "ovulation-dot"
-                        inner += f'<div class="cal-dot {p_cls}">{p_mark}</div>'
                 for e in [e for e in events if e.get("date") == date_str]:
                     inner += f'<div class="cal-dot event-dot">📍 {e["title"]}</div>'
                 for n in [n for n in ng_dates if n.get("date") == date_str]:
