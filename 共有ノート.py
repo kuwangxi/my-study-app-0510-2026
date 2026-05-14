@@ -381,10 +381,10 @@ with tab3:
 
     # 3. カレンダーHTMLの構築
     cal_html = '<div class="cal-grid">'
-    for w in ["月", "火", "水", "木", "金", "土", "日"]: 
+    for w in ["日", "月", "火", "水", "木", "金", "土"]: 
         cal_html += f'<div class="cal-header-item">{w}</div>'
     
-    month_days = calendar.Calendar(0).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
+    month_days = calendar.Calendar(6).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
     
     for week in month_days:
         for day in week:
@@ -408,17 +408,24 @@ with tab3:
                     inner += f'<div style="font-size:0.6em; color:gray; position:relative; z-index:1;">{w_wind}</div>'
                 
                 # 各種ドット
+               # --- 修正・追加：各種ドットの表示 ---
+                
                 # 1. 生理・排卵予定の表示（ここを追加）
                 if date_str in period_dates:
                     for p_type, p_mark in period_dates[date_str]:
                         # CSSクラスをタイプ別に判定
                         p_cls = "period-dot" if p_type == "period" else "ovulation-dot"
                         inner += f'<div class="cal-dot {p_cls}">{p_mark}</div>'
+
+                # 2. 予定 (📍) の表示
                 for e in [e for e in events if e.get("date") == date_str]:
                     inner += f'<div class="cal-dot event-dot">📍 {e["title"]}</div>'
-                for n in [n for n in ng_dates if n.get("date") == date_str]:
-                    inner += f'<div class="cal-dot ng-dot">🚫 {n.get("userName")}</div>'
                 
+                # 3. NG日 (🚫) の表示
+                for n in [n for n in ng_dates if n.get("date") == date_str]:
+                    inner += f'<div class="cal-dot ng-dot">🚫 {n.get("userName"]}</div>'
+                
+                # 4. 家計簿 (💸) の表示
                 day_expenses = [f['amount'] for f in finances if f.get('date') == date_str]
                 if day_expenses:
                     inner += f'<div class="cal-dot expense-dot">💸 -{sum(day_expenses):,}円</div>'
