@@ -423,32 +423,38 @@ with tab3:
     month_days = calendar.Calendar(6).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
     
     for week in month_days:
-        for day in week:
+       for day in week:
             if day == 0:
                 cal_html += '<div></div>'
             else:
                 this_date = st.session_state.current_month.replace(day=day)
                 date_str = str(this_date)
                 
-                # 天気データの取得
-                w_info = weather_data.get(date_str, {"mark": "", "wind": ""})
-                w_mark = w_info["mark"]
-                w_wind = w_info["wind"]
+                # --- 背景（天気情報）の構築 ---
+                bg_info = ""  # ← ここの行頭スペースを上の行（date_str）と揃える
+                if date_str in weather_data:
+                    w = weather_data[date_str]
+                    bg_info = f'''
+                    <div class="cal-bg-info">
+                        <div class="bg-weather-mark">{w['mark']}</div>
+                        <div class="bg-temp">
+                            <span style="color:#ff4b4b;">{w['t_max']}°</span> / 
+                            <span style="color:#3b82f6;">{w['t_min']}°</span>
+                        </div>
+                        <div class="bg-wind">💨 {w['wind']}m</div>
+                    </div>
+                    '''
+
+                # --- 表面（コンテンツ）の構築 ---
+                inner_content = f'<div class="cal-date">{day}</div>'
                 
-                # 背景の天気画像（アイコン）
-                bg_weather = f'<div class="weather-bg">{w_mark}</div>' if w_mark else ""
-                
-                # アイコンや風情報の構築
-                inner = f'<div class="cal-date">{day}</div>{bg_weather}'
-                if w_wind:
-                    inner += f'<div style="font-size:0.6em; color:gray; position:relative; z-index:1;">{w_wind}</div>'
-                
-                # 各種ドット
-                # --- 生理予定・排卵予定の表示を追加 ---
+                # 生理・排卵
                 if date_str in period_dates:
                     for p_type, p_mark in period_dates[date_str]:
-                        if p_type == "period":
-                            inner += f'<div class="cal-dot" style="color: #f43f5e;">{p_mark} </div>'
+                        color = "#f43f5e" if p_type == "period" else "#fbbf24"
+                        inner_content += f'<div class="cal-dot" style="color: {color};">{p_mark}</div>'
+
+                # （以下略... 同様にインデントを揃える）
                         elif p_type == "ovulation":
                             inner += f'<div class="cal-dot" style="color: #fbbf24;">{p_mark} </div>'
                 for e in [e for e in events if e.get("date") == date_str]:
