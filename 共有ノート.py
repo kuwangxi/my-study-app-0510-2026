@@ -381,7 +381,15 @@ with tab2:
                             get_events_ref().document(item['id']).update({"status": "wishlist", "date": None}); st.rerun()
 
 # --- タブ3: カレンダー ---
-with tab3:
+    with tab3:
+        # ここで最新の天気データを取得する（これが抜けているとエラーになります）
+        weather_data = get_shinjuku_weather() 
+
+        sorted_events = sorted(events, key=lambda x: str(x.get("time") or "23:59"))
+        # ...（中略：家計簿取得など）...
+
+        # 3. カレンダーHTMLの構築
+        cal_html = '<div class="cal-grid">' # ←これがカレンダーの「枠」です
     sorted_events = sorted(events, key=lambda x: str(x.get("time") or "23:59"))
     finances = [{"id": d.id, **d.to_dict()} for d in get_finances_ref().where("roomKey", "==", room_key).stream()]
     
