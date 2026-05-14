@@ -377,12 +377,51 @@ with tab3:
                 w_mark = weather_data.get(date_str, ""); 
                 if w_mark: inner += f'<div class="weather-bg">{w_mark}</div>'
                 for p_type, p_label in period_dates.get(date_str, []): inner += f'<div class="cal-dot {p_type}-dot">{p_label}</div>'
-                for e in [e for e in events if e.get("date") == date_str]: inner += f'<div class="cal-dot event-dot">📍 {e["title"]}</div>'
+                # 予定を時間順に並び替えてから表示
+                day_events = sorted([e for e in events if e.get("date") == date_str], key=lambda x: x.get("time", ""))
+                for e in day_events: 
+                    # 時間も一緒に表示するとより分かりやすくなります
+                    time_prefix = f"{e['time']} " if e.get('time') else ""
+                    inner += f'<div class="cal-dot event-dot">📍 {time_prefix}{e["title"]}</div>'
                 for n in [n for n in ng_dates if n.get("date") == date_str]: inner += f'<div class="cal-dot ng-dot">🚫 {n.get("userName")}</div>'
                 day_expenses = [f['amount'] for f in finances if f.get('date') == date_str]
                 if day_expenses: inner += f'<div class="cal-dot expense-dot">💸 -{sum(day_expenses):,}円</div>'
                 cal_html += f'<div class="cal-box {"cal-today" if this_date == today_jst else ""}">{inner}</div>'
     st.markdown(cal_html + '</div>', unsafe_allow_html=True)
+    # --- 選択した日の詳細表示エリア ---
+    st.divider()
+    st.subheader("🔍 日ごとの詳細確認")
+    
+    # カレンダーをタップする代わりとして、日付選択を用意します
+    selected_date = st.date_input("詳細を見たい日を選択してください", value=today_jst, key="cal_detail_date")
+    sel_date_str = str(selected_date)
+    
+    with st.container(border=True):
+        st.markdown(f"### 📅 {sel_date_str} の詳細")
+        
+        # 1. 予定（時間順）
+        day_events = sorted([e for e in events if e.get("date") == sel_date_str], key=lambda x: x.get("time", ""))
+        if day_events:
+            st.markdown("**🚀 予定**")
+            for e in day_events:
+                st.info(f"【{e.get('time', '時間未定')}】 {e['title']}")
+        
+        # 2. NG日（誰がダメか）
+        day_ngs = [n for n in ng_dates if n.get("date") == sel_date_str]
+        if day_ngs:
+            st.markdown("**🚫 NG（予定あり）な人**")
+            for n in day_ngs:
+                st.warning(f"{n.get('userName', '不明')} さん")
+                
+        # 3. 支出（家計簿）
+        day_fin = [f for f in finances if f.get('date') == sel_date_str]
+        if day_fin:
+            st.markdown("**💸 支出記録**")
+            for f in day_fin:
+                st.error(f"{f['amount']:,}円 （{f.get('memo', 'メモなし')}）")
+        
+        if not day_events and not day_ngs and not day_fin:
+            st.write("この日の記録はありません。")
 
     # --- 家計簿エリア ---
     st.divider()
