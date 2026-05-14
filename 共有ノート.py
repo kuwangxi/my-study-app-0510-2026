@@ -230,7 +230,11 @@ with tab1:
         wt = time_selector_ui("wish_add")
         if st.button("リストに追加", type="primary"):
             if t:
-                get_events_ref().add({"roomKey": room_key, "title": t, "url": u, "status": "wishlist", "comments": [], "time": wt, "createdAt": get_jst_now().isoformat()}); st.rerun()
+                get_events_ref().add({"roomKey": room_key, "title": t, "url": u, "status": "wishlist", "comments": [], "time": wt, "createdAt": get_jst_now().isoformat()})
+                # テキストボックスをリセット
+                st.session_state.input_title_wish = ""
+                st.session_state.input_url_wish = ""
+                st.rerun()
     
     wish_items = [e for e in events if e.get("status") == "wishlist"]
     for item in sorted(wish_items, key=get_latest_activity_time, reverse=True):
@@ -252,7 +256,10 @@ with tab1:
                     if c_col2.button("送信", key=f"ncb_{item['id']}", use_container_width=True):
                         if new_c:
                             c_obj = {"userName": user_name, "text": new_c, "createdAt": get_jst_now().isoformat()}
-                            get_events_ref().document(item['id']).update({"comments": firestore.ArrayUnion([c_obj])}); st.rerun()
+                            get_events_ref().document(item['id']).update({"comments": firestore.ArrayUnion([c_obj])})
+                            # コメント欄をリセット
+                            st.session_state[f"nc_{item['id']}"] = ""
+                            st.rerun()
                     st.divider()
                     st.write("📅 予定を確定する")
                     sd, st_time = st.date_input("確定日", value=today_jst, key=f"sd_{item['id']}"), time_selector_ui(f"fix_{item['id']}")
@@ -341,7 +348,11 @@ with tab3:
             ex_memo = st.text_input("メモ", key="ex_memo")
             if st.button("記録する", use_container_width=True):
                 if ex_amount > 0:
-                    get_finances_ref().add({"roomKey": room_key, "date": str(ex_date), "amount": ex_amount, "memo": ex_memo, "createdAt": get_jst_now().isoformat()}); st.rerun()
+                    get_finances_ref().add({"roomKey": room_key, "date": str(ex_date), "amount": ex_amount, "memo": ex_memo, "createdAt": get_jst_now().isoformat()})
+                    # 金額とメモをリセット
+                    st.session_state.ex_amount = 0
+                    st.session_state.ex_memo = ""
+                    st.rerun()
         with fc2:
             st.markdown("**積立設定**")
             set_start = st.date_input("開始日", value=datetime.strptime(f_start_date, "%Y-%m-%d").date(), key="set_start")
@@ -367,7 +378,10 @@ with tab4:
     nd, nt = st.date_input("日付", value=today_jst, key="ng_in"), time_selector_ui("ng_time_in")
     n_memo = st.text_input("メモ (任意)", key="ng_memo_in")
     if st.button("NG登録", type="primary", use_container_width=True):
-        get_ng_ref().add({"roomKey": room_key, "userName": user_name, "date": str(nd), "time": nt, "memo": n_memo, "createdAt": get_jst_now().isoformat()}); st.rerun()
+        get_ng_ref().add({"roomKey": room_key, "userName": user_name, "date": str(nd), "time": nt, "memo": n_memo, "createdAt": get_jst_now().isoformat()})
+        # メモ欄をリセット
+        st.session_state.ng_memo_in = ""
+        st.rerun()
     
     st.divider()
     st.write("▼ 登録済みのNG日（編集・削除）")
