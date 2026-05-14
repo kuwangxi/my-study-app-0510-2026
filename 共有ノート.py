@@ -348,7 +348,7 @@ with tab3:
 
     # --- 家計簿エリア ---
     st.divider()
-    with st.expander("💰 共有貯金・家計簿 (修正・削除もこちら)", expanded=False):
+    with st.expander("💰 共有貯金", expanded=False):
         room_doc = get_rooms_ref().document(room_key).get()
         f_settings = room_doc.to_dict().get("finance_settings", {}) if room_doc.exists else {}
         f_start_date = f_settings.get("start_date", str(today_jst.replace(day=1)))
