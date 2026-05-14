@@ -96,31 +96,47 @@ def time_selector_ui(key_prefix, default_val="カスタム"):
 @st.cache_data(ttl=3600)
 def get_shinjuku_weather():
     try:
-        # 新宿の正確な位置：緯度35.6895, 経度139.7005
-        url = "https://api.open-meteo.com/v1/forecast?latitude=35.6895&longitude=139.7005&daily=weathercode,windspeed_10m_max&timezone=Asia%2FTokyo&past_days=7&forecast_days=14"
+        # 気象庁の公式データ（東京）
+        url = "https://www.jma.go.jp/bosai/forecast/data/forecast/130000.json"
         res = requests.get(url).json()
+        
+        # 予報データの抽出
+        area_data = res[0]['timeSeries'][0]['areas'][0]
+        wind_texts = res[0]['timeSeries'][1]['areas'][0]['winds']
+        time_defines = res[0]['timeSeries'][0]['timeDefines']
+        
         w_map = {}
-        for i, date_str in enumerate(res['daily']['time']):
-            code = res['daily']['weathercode'][i]
-            wind = res['daily']['windspeed_10m_max'][i]
+        for i in range(len(time_defines)):
+            raw_date = time_defines[i]
+            date_str = raw_date[:10]
+            telop = area_data['weathers'][i]
+            wind_text = wind_texts[i]
             
-            # 天気アイコン
-            if code in [0, 1]: mark = "☀️"
-            elif code in [2, 3]: mark = "☁️"
-            elif code in [45, 48]: mark = "🌫️"
-            elif code in [51,53,55,56,57,61,63,65,66,67,80,81,82]: mark = "☔"
-            elif code in [71,73,75,77,85,86]: mark = "⛄"
-            elif code in [95,96,99]: mark = "⚡"
-            else: mark = ""
+            # --- 天気マークの判定（優先順位をつけて判定） ---
+            if "雷" in telop:
+                mark = "⚡"
+            elif "雪" in telop:
+                mark = "⛄"
+            elif "雨" in telop:
+                mark = "☔"
+            elif "晴" in telop:
+                mark = "☀️"
+            elif "曇" in telop:
+                mark = "☁️"
+            else:
+                mark = "☁️"
 
-            # 風の表示
-            wind_info = ""
-            if wind >= 20.0: wind_info = f"🚩強風({int(wind)})"
-            elif wind >= 10.0: wind_info = f"🍃風({int(wind)})"
+            # --- 風の強さ判定 ---
+            if "強く" in wind_text or "非常に強く" in wind_text:
+                wind_display = "🚩 強風"
+            else:
+                wind_display = "🍃 弱風"
             
-            w_map[date_str] = {"mark": mark, "wind": wind_info}
+            w_map[date_str] = {"mark": mark, "wind": wind_display}
+            
         return w_map
-    except: return {}
+    except Exception as e:
+        return {}
 
 weather_data = get_shinjuku_weather()
 
