@@ -447,7 +447,7 @@ with tab3:
         for n in day_ngs:
             memo_part = f" ： {n['memo']}" if n.get("memo") else ""
             # 誰のNGかわかるように名前と、あればメモを表示します
-            st.error(f"🚫 【{n.get('time') or '終日'}】 {n.get('userName', '不明')} さんのNG{memo_part}")
+            st.error(f"🚫 【{n.get('time') or '終日'}】 {n.get('userName', '不明')} のNG{memo_part}")
 
         # --- 3. 生理予定（🌙）の表示（任意） ---
         if sel_str in period_dates:
