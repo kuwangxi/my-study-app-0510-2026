@@ -496,31 +496,37 @@ with tab3:
                     '''
 
                 # --- 表面（コンテンツ）の構築 ---
-                inner_content = f'<div class="cal-date">{day}</div>'
+                inner = f'<div class="cal-date">{day}</div>'
                 
-               # 各種ドット
-                # --- 生理予定・排卵予定 ---
+                # 1. 生理・排卵予定
                 if date_str in period_dates:
                     for p_type, p_mark in period_dates[date_str]:
                         if p_type == "period":
-                            inner += f'<div class="cal-dot" style="color: #f43f5e;">{p_mark}</div>'
+                            inner += f'<div class="cal-dot" style="color:#f43f5e;">{p_mark}</div>'
                         elif p_type == "ovulation":
-                            inner += f'<div class="cal-dot" style="color: #fbbf24;">{p_mark}</div>'
+                            inner += f'<div class="cal-dot" style="color:#fbbf24;">{p_mark}</div>'
                 
-                # --- 予定・NG・支出 ---
-                for e in [e for e in events if e.get("date") == date_str]:
+                # 2. 予定 (📍)
+                day_events = [e for e in events if e.get("date") == date_str]
+                for e in day_events:
                     inner += f'<div class="cal-dot event-dot">📍 {e["title"]}</div>'
-
-                for n in [n for n in ng_dates if n.get("date") == date_str]:
+                
+                # 3. NG日 (🚫)
+                day_ngs = [n for n in ng_dates if n.get("date") == date_str]
+                for n in day_ngs:
                     inner += f'<div class="cal-dot ng-dot">🚫 {n.get("userName")}</div>'
-
+                
+                # 4. 家計簿 (💸)
                 day_expenses = [f['amount'] for f in finances if f.get('date') == date_str]
-                # HTML結合（背景の上にコンテンツを重ねる）
+                if day_expenses:
+                    inner += f'<div class="cal-dot expense-dot">💸 -{sum(day_expenses):,}</div>'
+
+                # --- 最終的なHTML結合 ---
                 today_cls = "cal-today" if this_date == today_jst else ""
                 cal_html += f'''
                 <div class="cal-box {today_cls}">
                     {bg_info}
-                    <div class="cal-content">{inner_content}</div>
+                    <div class="cal-content">{inner}</div>
                 </div>
                 '''
     # --- 家計簿エリア ---
