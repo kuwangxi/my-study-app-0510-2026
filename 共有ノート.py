@@ -404,10 +404,11 @@ with tab2:
 
 # --- タブ3: カレンダー ---
 with tab3:
+    # データの準備
     sorted_events = sorted(events, key=lambda x: str(x.get("time") or "23:59"))
     finances = [{"id": d.id, **d.to_dict()} for d in get_finances_ref().where("roomKey", "==", room_key).stream()]
     
-    # 2. 月移動ヘッダー
+    # 1. 月移動ヘッダー
     cm1, cm2, cm3 = st.columns([1, 2, 1])
     if cm1.button("◀ 前月", key="prev_m"): 
         st.session_state.current_month = (st.session_state.current_month - timedelta(days=1)).replace(day=1); st.rerun()
@@ -415,12 +416,14 @@ with tab3:
     if cm3.button("次月 ▶", key="next_m"): 
         st.session_state.current_month = (st.session_state.current_month + timedelta(days=32)).replace(day=1); st.rerun()
 
-    # 3. カレンダーHTMLの構築
+    # 2. カレンダーHTMLの構築
     cal_html = '<div class="cal-grid">'
-    for w in ["月", "火", "水", "木", "金", "土", "日"]: 
+    # 日曜始まりに変更
+    for w in ["日", "月", "火", "水", "木", "金", "土"]: 
         cal_html += f'<div class="cal-header-item">{w}</div>'
     
-    month_days = calendar.Calendar(0).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
+    # calendar.Calendar(6) で日曜始まりを指定
+    month_days = calendar.Calendar(6).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
     
     for week in month_days:
         for day in week:
@@ -434,21 +437,28 @@ with tab3:
                 w_info = weather_data.get(date_str, {"mark": "", "wind": ""})
                 w_mark = w_info["mark"]
                 w_wind = w_info["wind"]
-                
-                # 背景の天気画像（アイコン）
                 bg_weather = f'<div class="weather-bg">{w_mark}</div>' if w_mark else ""
                 
                 # アイコンや風情報の構築
                 inner = f'<div class="cal-date">{day}</div>{bg_weather}'
                 if w_wind:
-                    inner += f'<div style="font-size:0.6em; color:gray; position:relative; z-index:1;">{w_wind}</div>'
+                    inner += f'<div style="font-size:0.6em; color:gray; position:relative; z-index:1;">{w_wind}m/s</div>'
                 
-                # 各種ドット
+                # --- 各種ドット/ラベルの追加 ---
+                
+                # 📍 通常の予定
                 for e in [e for e in events if e.get("date") == date_str]:
                     inner += f'<div class="cal-dot event-dot">📍 {e["title"]}</div>'
+                
+                # 🚫 NG日
                 for n in [n for n in ng_dates if n.get("date") == date_str]:
                     inner += f'<div class="cal-dot ng-dot">🚫 {n.get("userName")}</div>'
                 
+                # 🩸 生理予定日（追加分）
+                for p in [p for p in periods if p.get("date") == date_str]:
+                    inner += f'<div class="cal-dot period-dot" style="background-color:#ffe4e6; color:#e11d48; border-left:3px solid #e11d48; font-size:0.7em; padding:1px 3px; margin:1px 0; border-radius:2px;">🩸 生理予定日</div>'
+                
+                # 💸 支出
                 day_expenses = [f['amount'] for f in finances if f.get('date') == date_str]
                 if day_expenses:
                     inner += f'<div class="cal-dot expense-dot">💸 -{sum(day_expenses):,}円</div>'
@@ -459,7 +469,7 @@ with tab3:
     
     st.markdown(cal_html + '</div>', unsafe_allow_html=True)
 
-    # 4. 詳細表示用の日付選択（タップの代わり）
+    # 3. 詳細表示用の日付選択
     st.divider()
     selected_date = st.date_input("詳細を見たい日を選択", value=today_jst)
     sel_str = str(selected_date)
@@ -467,11 +477,21 @@ with tab3:
     with st.container(border=True):
         st.markdown(f"### 📅 {sel_str} の詳細")
         day_events = [e for e in sorted_events if e.get("date") == sel_str]
-        for e in day_events:
-            st.info(f"【{e.get('time') or '終日'}】{e['title']}")
+        day_periods = [p for p in periods if p.get("date") == sel_str]
+        
+        if day_periods:
+            st.error("🩸 この日は生理予定日です")
+            
+        if day_events:
+            for e in day_events:
+                st.info(f"【{e.get('time') or '終日'}】{e['title']}")
+        elif not day_periods:
+            st.write("予定はありません。")
+
     # --- 家計簿エリア ---
     st.divider()
     with st.expander("💰 共有貯金", expanded=False):
+        # （以下、家計簿のコードは変更なしで継続）
         room_doc = get_rooms_ref().document(room_key).get()
         f_settings = room_doc.to_dict().get("finance_settings", {}) if room_doc.exists else {}
         f_start_date = f_settings.get("start_date", str(today_jst.replace(day=1)))
