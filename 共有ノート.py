@@ -381,10 +381,10 @@ with tab3:
 
     # 3. カレンダーHTMLの構築
     cal_html = '<div class="cal-grid">'
-    for w in ["月", "火", "水", "木", "金", "土", "日"]: 
+    for w in ["日", "月", "火", "水", "木", "金", "土"]: 
         cal_html += f'<div class="cal-header-item">{w}</div>'
     
-    month_days = calendar.Calendar(0).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
+    month_days = calendar.Calendar(6).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
     
     for week in month_days:
         for day in week:
@@ -430,9 +430,28 @@ with tab3:
     
     with st.container(border=True):
         st.markdown(f"### 📅 {sel_str} の詳細")
+        
+        # --- 1. 予定（📍）の表示 ---
         day_events = [e for e in sorted_events if e.get("date") == sel_str]
         for e in day_events:
-            st.info(f"【{e.get('time') or '終日'}】{e['title']}")
+            st.info(f"📍 【{e.get('time') or '終日'}】 {e['title']}")
+        
+        # --- 2. NG日（🚫）の表示を追加 ---
+        day_ngs = [n for n in ng_dates if n.get("date") == sel_str]
+        for n in day_ngs:
+            memo_part = f" ： {n['memo']}" if n.get("memo") else ""
+            # 誰のNGかわかるように名前と、あればメモを表示します
+            st.error(f"🚫 【{n.get('time') or '終日'}】 {n.get('userName', '不明')} さんのNG{memo_part}")
+
+        # --- 3. 生理予定（🌙）の表示（任意） ---
+        if sel_str in period_dates:
+            for p_type, p_mark in period_dates[sel_str]:
+                label = "生理予定日" if p_type == "period" else "排卵予定日"
+                st.warning(f"{p_mark} {label}")
+        
+        # 何も予定がない場合
+        if not day_events and not day_ngs and sel_str not in period_dates:
+            st.write("この日の予定やNG登録はありません。")
 
     # --- 家計簿エリア ---
     st.divider()
