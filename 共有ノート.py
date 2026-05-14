@@ -407,11 +407,17 @@ with tab3:
                 if w_wind:
                     inner += f'<div style="font-size:0.6em; color:gray; position:relative; z-index:1;">{w_wind}</div>'
                 
-                # 各種ドット
+               # 各種ドット
                 for e in [e for e in events if e.get("date") == date_str]:
                     inner += f'<div class="cal-dot event-dot">📍 {e["title"]}</div>'
                 for n in [n for n in ng_dates if n.get("date") == date_str]:
                     inner += f'<div class="cal-dot ng-dot">🚫 {n.get("userName")}</div>'
+                
+                # --- ここから追加：生理予定日と排卵日の表示 ---
+                if date_str in period_dates:
+                    for p_type, p_mark in period_dates[date_str]:
+                        inner += f'<div class="cal-dot {p_type}-dot">{p_mark}</div>'
+                # --- ここまで追加 ---
                 
                 day_expenses = [f['amount'] for f in finances if f.get('date') == date_str]
                 if day_expenses:
