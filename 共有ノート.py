@@ -96,20 +96,29 @@ def time_selector_ui(key_prefix, default_val="カスタム"):
 @st.cache_data(ttl=3600)
 def get_shinjuku_weather():
     try:
+        # 新宿の正確な位置：緯度35.6895, 経度139.7005
         url = "https://api.open-meteo.com/v1/forecast?latitude=35.6895&longitude=139.7005&daily=weathercode,windspeed_10m_max&timezone=Asia%2FTokyo&past_days=7&forecast_days=14"
         res = requests.get(url).json()
         w_map = {}
         for i, date_str in enumerate(res['daily']['time']):
-            code = res['daily']['weathercode'][i]; wind = res['daily']['windspeed_10m_max'][i]
-            if wind > 20.0: mark = "💨"
-            elif code in [0, 1]: mark = "☀️"
+            code = res['daily']['weathercode'][i]
+            wind = res['daily']['windspeed_10m_max'][i]
+            
+            # 天気アイコン
+            if code in [0, 1]: mark = "☀️"
             elif code in [2, 3]: mark = "☁️"
             elif code in [45, 48]: mark = "🌫️"
             elif code in [51,53,55,56,57,61,63,65,66,67,80,81,82]: mark = "☔"
             elif code in [71,73,75,77,85,86]: mark = "⛄"
             elif code in [95,96,99]: mark = "⚡"
             else: mark = ""
-            w_map[date_str] = mark
+
+            # 風の表示
+            wind_info = ""
+            if wind >= 20.0: wind_info = f"🚩強風({int(wind)})"
+            elif wind >= 10.0: wind_info = f"🍃風({int(wind)})"
+            
+            w_map[date_str] = {"mark": mark, "wind": wind_info}
         return w_map
     except: return {}
 
@@ -359,21 +368,17 @@ with tab2:
 
 # --- タブ3: カレンダー ---
 with tab3:
-    # 【修正ポイント】str() と or を使って、Noneを確実に文字列に変換します
-    # これにより、時間の入っていない予定は自動的に "23:59"（最後の方）として扱われます
+    # 予定を時間順にソート
     sorted_events = sorted(events, key=lambda x: str(x.get("time") or "23:59"))
     
+    # 家計簿データの取得
     finances = [{"id": d.id, **d.to_dict()} for d in get_finances_ref().where("roomKey", "==", room_key).stream()]
     
-    # --- 以降のコード（selected_date_str の設定など）は変更なし ---
-    if "selected_date_str" not in st.session_state:
-        st.session_state.selected_date_str = str(today_jst)
-    
-    # 選択された日付を保持する状態
+    # 選択された日付を保持する状態（未設定なら今日）
     if "selected_date_str" not in st.session_state:
         st.session_state.selected_date_str = str(today_jst)
 
-    # 2. 月移動ヘッダー
+    # 1. 月移動ヘッダー
     cm1, cm2, cm3 = st.columns([1, 2, 1])
     if cm1.button("◀ 前月", key="prev_month"): 
         st.session_state.current_month = (st.session_state.current_month - timedelta(days=1)).replace(day=1)
@@ -383,24 +388,27 @@ with tab3:
         st.session_state.current_month = (st.session_state.current_month + timedelta(days=32)).replace(day=1)
         st.rerun()
 
-    # 3. カレンダーの描画（タップ可能）
-    # 曜日のヘッダー
-    cols = st.columns(7)
+    # 2. カレンダーの描画（横7列・タップ可能）
     weekdays = ["月", "火", "水", "木", "金", "土", "日"]
+    header_cols = st.columns(7)
     for i, w in enumerate(weekdays):
-        cols[i].markdown(f"<center><b>{w}</b></center>", unsafe_allow_html=True)
+        header_cols[i].markdown(f"<center><b>{w}</b></center>", unsafe_allow_html=True)
 
-    # 日付ボタンの配置
     month_days = calendar.Calendar(0).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
     
     for week in month_days:
-        cols = st.columns(7)
+        cols = st.columns(7) # ここで横7列を確保
         for i, day in enumerate(week):
             if day == 0:
-                cols[i].write("") # 空白
+                cols[i].write("") # 月外の日付は空白
             else:
                 this_date = st.session_state.current_month.replace(day=day)
                 date_str = str(this_date)
+                
+                # --- 天気・風速の取得 ---
+                w_info = weather_data.get(date_str, {"mark": "", "wind": ""})
+                w_mark = w_info["mark"]
+                w_wind = w_info["wind"]
                 
                 # アイコンの準備
                 icons = ""
@@ -408,20 +416,25 @@ with tab3:
                 if any(f.get("date") == date_str for f in finances): icons += "💸"
                 if any(n.get("date") == date_str for n in ng_dates): icons += "🚫"
                 
-                # ボタンとして日付を表示（タップ可能）
-                # 今日の場合は枠線を変えるなどの装飾
-                btn_label = f"{day}\n{icons}"
-                if cols[i].button(btn_label, key=f"btn_{date_str}", use_container_width=True):
-                    st.session_state.selected_date_str = date_str # タップで日付を保存
+                # ボタンのラベル（日付 + 天気 + アイコン + 風速）
+                # 改行を使ってコンパクトにまとめます
+                display_label = f"{day} {w_mark}\n{icons}\n{w_wind}"
+                
+                # 今日の日付は目立たせる
+                is_today = (this_date == today_jst)
+                
+                # 日付ボタン本体
+                if cols[i].button(display_label, key=f"btn_{date_str}", use_container_width=True):
+                    st.session_state.selected_date_str = date_str # タップで日付を更新
                     st.rerun()
 
-    # 4. 💡【タップした日の詳細表示エリア】
+    # 3. 💡【タップした日の詳細表示エリア】（元の機能を完全維持）
     st.divider()
     sel_date = st.session_state.selected_date_str
     st.subheader(f"📅 {sel_date} の詳細")
     
     with st.container(border=True):
-        # A. 予定（時間順に並べて表示）
+        # A. 予定
         day_events = [e for e in sorted_events if e.get("date") == sel_date]
         if day_events:
             st.markdown("**🚀 予定**")
@@ -446,7 +459,7 @@ with tab3:
         if not day_events and not day_ngs and not day_fin:
             st.write("この日の記録はありません。")
 
-    # --- 家計簿エリア（既存のコード） ---
+    # --- 家計簿エリア（以降、既存のコードと結合） ---
     st.divider()
     # ...（以下、元の「💰 共有貯金」のコードに続く）
 
