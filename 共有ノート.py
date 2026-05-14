@@ -498,27 +498,23 @@ with tab3:
                 # --- 表面（コンテンツ）の構築 ---
                 inner_content = f'<div class="cal-date">{day}</div>'
                 
-               # --- 生理予定・排卵予定の表示 ---
+               # 各種ドット
+                # --- 生理予定・排卵予定 ---
                 if date_str in period_dates:
                     for p_type, p_mark in period_dates[date_str]:
                         if p_type == "period":
-                            inner_content += f'<div class="cal-dot" style="color: #f43f5e;">{p_mark}</div>'
+                            inner += f'<div class="cal-dot" style="color: #f43f5e;">{p_mark}</div>'
                         elif p_type == "ovulation":
-                            inner_content += f'<div class="cal-dot" style="color: #fbbf24;">{p_mark}</div>'
+                            inner += f'<div class="cal-dot" style="color: #fbbf24;">{p_mark}</div>'
                 
-                # 予定
+                # --- 予定・NG・支出 ---
                 for e in [e for e in events if e.get("date") == date_str]:
-                    inner_content += f'<div class="cal-dot event-dot">📍 {e["title"]}</div>'
-                
-                # NG日
-                for n in [n for n in ng_dates if n.get("date") == date_str]:
-                    inner_content += f'<div class="cal-dot ng-dot">🚫 {n.get("userName")}</div>'
-                
-                # 家計簿（支出）
-                day_expenses = [f['amount'] for f in finances if f.get('date') == date_str]
-                if day_expenses:
-                    inner_content += f'<div class="cal-dot expense-dot">💸 -{sum(day_expenses):,}</div>'
+                    inner += f'<div class="cal-dot event-dot">📍 {e["title"]}</div>'
 
+                for n in [n for n in ng_dates if n.get("date") == date_str]:
+                    inner += f'<div class="cal-dot ng-dot">🚫 {n.get("userName")}</div>'
+
+                day_expenses = [f['amount'] for f in finances if f.get('date') == date_str]
                 # HTML結合（背景の上にコンテンツを重ねる）
                 today_cls = "cal-today" if this_date == today_jst else ""
                 cal_html += f'''
