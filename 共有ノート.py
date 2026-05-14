@@ -322,17 +322,22 @@ with tab2:
                 new_title = st.text_input("内容", value=item['title'], key=f"edit_t_{item['id']}")
                 new_date = st.date_input("日付", value=datetime.strptime(item['date'], "%Y-%m-%d").date(), key=f"edit_d_{item['id']}")
                 new_time = time_selector_ui(f"edit_tm_{item['id']}", default_val=item.get('time', 'カスタム'))
+                
                 c_u, c_d = st.columns(2)
                 if c_u.button("更新", key=f"save_{item['id']}", use_container_width=True):
                     get_events_ref().document(item['id']).update({"title": new_title, "date": str(new_date), "time": new_time}); st.rerun()
                 if c_d.button("🗑️ 削除", key=f"del_{item['id']}", use_container_width=True):
                     get_events_ref().document(item['id']).delete(); st.rerun()
+                
+                # --- 【追加】行きたいに戻すボタン ---
+                if st.button("💡 行きたいリストに戻す", key=f"revert_{item['id']}", use_container_width=True):
+                    # statusをwishlistに変更し、日付情報を削除します
+                    get_events_ref().document(item['id']).update({"status": "wishlist", "date": None}); st.rerun()
 
     # 過去の予定を折り畳む
     if past_items:
         st.divider()
         with st.expander("✅ 終わった予定・過去のログを表示"):
-            # 新しい順に並び替えて表示
             for item in sorted(past_items, key=lambda x: x["date"], reverse=True):
                 with st.container(border=True):
                     st.write(f"📅 {item['date']} {item.get('time','')}")
@@ -341,11 +346,16 @@ with tab2:
                         new_title = st.text_input("内容", value=item['title'], key=f"edit_t_past_{item['id']}")
                         new_date = st.date_input("日付", value=datetime.strptime(item['date'], "%Y-%m-%d").date(), key=f"edit_d_past_{item['id']}")
                         new_time = time_selector_ui(f"edit_tm_past_{item['id']}", default_val=item.get('time', 'カスタム'))
+                        
                         c_u, c_d = st.columns(2)
                         if c_u.button("更新", key=f"save_past_{item['id']}", use_container_width=True):
                             get_events_ref().document(item['id']).update({"title": new_title, "date": str(new_date), "time": new_time}); st.rerun()
                         if c_d.button("🗑️ 削除", key=f"del_past_{item['id']}", use_container_width=True):
                             get_events_ref().document(item['id']).delete(); st.rerun()
+
+                        # --- 【追加】過去の予定からも戻せるように設定 ---
+                        if st.button("💡 行きたいリストに戻す", key=f"revert_past_{item['id']}", use_container_width=True):
+                            get_events_ref().document(item['id']).update({"status": "wishlist", "date": None}); st.rerun()
 
 # --- タブ3: カレンダー ---
 with tab3:
