@@ -142,7 +142,8 @@ st.markdown(f"""
 # 2. ログイン処理
 # ==========================================
 if "is_logged" not in st.session_state:
-    q_room, q_user = st.query_params.get("room"), q_user = st.query_params.get("user")
+    q_room = st.query_params.get("room")
+    q_user = st.query_params.get("user")
     if q_room and q_user:
         st.session_state.room_key, st.session_state.user_name, st.session_state.is_logged = q_room, q_user, True
         load_app_settings(q_room)
@@ -363,7 +364,6 @@ with tab3:
 
 # --- タブ4: NG日 ---
 with tab4:
-    # 登録エリアにメモ追加
     nd, nt = st.date_input("日付", value=today_jst, key="ng_in"), time_selector_ui("ng_time_in")
     n_memo = st.text_input("メモ (任意)", key="ng_memo_in")
     if st.button("NG登録", type="primary", use_container_width=True):
@@ -372,7 +372,6 @@ with tab4:
     st.divider()
     st.write("▼ 登録済みのNG日（編集・削除）")
     for n in sorted(ng_dates, key=lambda x: x["date"]):
-        # リストのタイトルにメモを表示
         memo_disp = f" - {n['memo']}" if n.get("memo") else ""
         with st.expander(f"🚫 {n['date']} ({n.get('time', '終日')}) - {n.get('userName', '不明')}{memo_disp}"):
             end = st.date_input("日付変更", value=datetime.strptime(n['date'], "%Y-%m-%d").date(), key=f"end_{n['id']}")
