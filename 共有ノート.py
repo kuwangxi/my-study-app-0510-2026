@@ -498,11 +498,13 @@ with tab3:
                 # --- 表面（コンテンツ）の構築 ---
                 inner_content = f'<div class="cal-date">{day}</div>'
                 
-                # 生理・排卵予定
+                # --- 生理予定・排卵予定の表示 ---
                 if date_str in period_dates:
                     for p_type, p_mark in period_dates[date_str]:
-                        color = "#f43f5e" if p_type == "period" else "#fbbf24"
-                        inner_content += f'<div class="cal-dot" style="color: {color};">{p_mark}</div>'
+                        if p_type == "period":
+                            inner_content += f'<div class="cal-dot" style="color: #f43f5e;">{p_mark}</div>'
+                        elif p_type == "ovulation":
+                            inner_content += f'<div class="cal-dot" style="color: #fbbf24;">{p_mark}</div>'
                 
                 # 予定
                 for e in [e for e in events if e.get("date") == date_str]:
