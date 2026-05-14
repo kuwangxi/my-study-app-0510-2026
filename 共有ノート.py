@@ -96,13 +96,16 @@ def time_selector_ui(key_prefix, default_val="カスタム"):
 @st.cache_data(ttl=3600)
 def get_shinjuku_weather():
     try:
-        # 新宿の正確な位置：緯度35.6895, 経度139.7005
-        url = "https://api.open-meteo.com/v1/forecast?latitude=35.6895&longitude=139.7005&daily=weathercode,windspeed_10m_max&timezone=Asia%2FTokyo&past_days=7&forecast_days=14"
+        # 緯度経度は新宿。dailyに温度(最高/最低)を追加
+        url = "https://api.open-meteo.com/v1/forecast?latitude=35.6895&longitude=139.7005&daily=weathercode,windspeed_10m_max,temperature_2m_max,temperature_2m_min&timezone=Asia%2FTokyo&past_days=7&forecast_days=14"
         res = requests.get(url).json()
         w_map = {}
+        
         for i, date_str in enumerate(res['daily']['time']):
             code = res['daily']['weathercode'][i]
             wind = res['daily']['windspeed_10m_max'][i]
+            t_max = res['daily']['temperature_2m_max'][i]
+            t_min = res['daily']['temperature_2m_min'][i]
             
             # 天気アイコン
             if code in [0, 1]: mark = "☀️"
@@ -113,12 +116,13 @@ def get_shinjuku_weather():
             elif code in [95,96,99]: mark = "⚡"
             else: mark = ""
 
-            # 風の表示
-            wind_info = ""
-            if wind >= 20.0: wind_info = f"🚩強風({int(wind)})"
-            elif wind >= 10.0: wind_info = f"🍃風({int(wind)})"
-            
-            w_map[date_str] = {"mark": mark, "wind": wind_info}
+            # 辞書に保存（風は数字の丸め込みのみ、気温も整数に）
+            w_map[date_str] = {
+                "mark": mark, 
+                "wind": round(wind, 1), 
+                "t_max": round(t_max), 
+                "t_min": round(t_min)
+            }
         return w_map
     except: return {}
 
@@ -127,24 +131,56 @@ weather_data = get_shinjuku_weather()
 # CSS
 st.markdown(f"""
 <style>
+    /* （既存のスタイル群...） */
     html, body, [class*="st-"] {{ font-size: {st.session_state.font_size}px !important; }}
     .cal-grid {{ display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; width: 100%; margin-top: 10px; }}
     .cal-header-item {{ text-align: center; font-weight: bold; font-size: 0.8em; padding: 5px 0; background-color: var(--secondary-background-color); color: var(--text-color); border-radius: 4px; }}
-    .cal-box {{ border: 1px solid rgba(128, 128, 128, 0.3); border-radius: 4px; padding: 4px; min-height: 85px; background-color: var(--background-color); position: relative; overflow-y: auto; }}
+    
+    /* aタグによるリンク装飾を無効化し、ホバー時のアクションを追加 */
+    a.cal-box {{ 
+        border: 1px solid rgba(128, 128, 128, 0.3); 
+        border-radius: 4px; 
+        padding: 4px; 
+        min-height: 85px; 
+        background-color: var(--background-color); 
+        position: relative; 
+        display: block;
+        text-decoration: none !important;
+        color: inherit !important;
+        overflow: hidden; /* 背景がはみ出さないように */
+        transition: 0.2s;
+    }}
+    a.cal-box:hover {{
+        border-color: #60a5fa;
+        background-color: rgba(96, 165, 250, 0.05);
+    }}
+
     .cal-date {{ font-size: 0.8em; font-weight: bold; margin-bottom: 2px; color: var(--text-color); }}
     .cal-today {{ border: 2px solid {st.session_state.user_color} !important; background-color: var(--secondary-background-color) !important; }}
+    
+    /* 背景用コンテナ（ここで全てを半透明にして背面になじませる） */
+    .cal-bg-info {{
+        position: absolute;
+        top: 0; left: 0; width: 100%; height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        opacity: 0.15; /* 薄さの調整はここで行います */
+        pointer-events: none; /* タップの邪魔にならないようにする */
+        z-index: 0;
+    }}
+    .bg-weather-mark {{ font-size: 2.5em; line-height: 1; margin-bottom: 2px; }}
+    .bg-temp {{ font-size: 0.75em; font-weight: bold; color: var(--text-color); line-height: 1.2; }}
+    .bg-wind {{ font-size: 0.7em; font-weight: bold; color: var(--text-color); }}
+
+    /* スケジュールなどは背景より手前(z-index:1)に配置 */
+    .cal-content {{ position: relative; z-index: 1; height: 100%; }}
+
     .cal-dot {{ font-size: 0.7em; margin-bottom: 1px; border-radius: 2px; padding: 1px 2px; line-height: 1.1; }}
     .event-dot {{ background-color: rgba(59, 130, 246, 0.2) !important; color: #60a5fa !important; }}
-    .period-dot {{ background-color: transparent !important; color: #f43f5e; border: none !important; font-weight: bold; font-size: 1.1em; }}
-    .ovulation-dot {{ background-color: transparent !important; color: #a855f7; border: none !important; font-weight: bold; font-size: 1.1em; }}
-    .pms-dot {{ background-color: transparent !important; color: #eab308; border: none !important; font-weight: bold; font-size: 1.1em; }}
-    .fertility-dot {{ background-color: transparent !important; color: #22c55e; border: none !important; font-weight: bold; font-size: 1.1em; }}
     .ng-dot {{ background: repeating-linear-gradient(45deg, rgba(128, 128, 128, 0.1), rgba(128, 128, 128, 0.1) 5px, rgba(150, 150, 150, 0.2) 5px, rgba(150, 150, 150, 0.2) 10px); color: var(--text-color); border: 1px solid rgba(128, 128, 128, 0.3); }}
-    .last-comment {{ font-size: 0.85em; border-left: 4px solid; padding-left: 10px; margin-top: 10px; margin-bottom: 10px; line-height: 1.4; }}
-    .time-badge {{ background-color: rgba(128, 128, 128, 0.2); padding: 2px 6px; border-radius: 4px; font-size: 0.8em; }}
-    .weather-bg {{ position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 3em; opacity: 0.15; pointer-events: none; z-index: 0; }}
     .expense-dot {{ background-color: transparent !important; color: #ef4444; border: none !important; font-weight: bold; font-size: 0.75em; text-align: right; }}
-    .memo-text {{ font-size: 0.85em; color: gray; margin-bottom: 5px; background: rgba(128, 128, 128, 0.05); padding: 5px; border-radius: 4px; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -395,17 +431,25 @@ with tab3:
                 date_str = str(this_date)
                 
                 # 天気データの取得
-                w_info = weather_data.get(date_str, {"mark": "", "wind": ""})
-                w_mark = w_info["mark"]
-                w_wind = w_info["wind"]
+                w_info = weather_data.get(date_str, {})
+                w_mark = w_info.get("mark", "")
+                w_wind = w_info.get("wind", "")
+                w_tmax = w_info.get("t_max", "")
+                w_tmin = w_info.get("t_min", "")
                 
-                # 背景の天気画像（アイコン）
-                bg_weather = f'<div class="weather-bg">{w_mark}</div>' if w_mark else ""
+                # 背景の半透明天気・気温・風情報（データがある場合のみ）
+                bg_html = ""
+                if w_info:
+                    bg_html = f'''
+                    <div class="cal-bg-info">
+                        <div class="bg-weather-mark">{w_mark}</div>
+                        <div class="bg-temp">{w_tmax}℃ / {w_tmin}℃</div>
+                        <div class="bg-wind">{w_wind}</div>
+                    </div>
+                    '''
                 
-                # アイコンや風情報の構築
-                inner = f'<div class="cal-date">{day}</div>{bg_weather}'
-                if w_wind:
-                    inner += f'<div style="font-size:0.6em; color:gray; position:relative; z-index:1;">{w_wind}</div>'
+                # アイコンやスケジュールの構築 (z-indexで背景より手前に配置)
+                inner = f'<div class="cal-content"><div class="cal-date">{day}</div>'
                 
                 # 各種ドット
                 for e in [e for e in events if e.get("date") == date_str]:
@@ -417,22 +461,38 @@ with tab3:
                 if day_expenses:
                     inner += f'<div class="cal-dot expense-dot">💸 -{sum(day_expenses):,}円</div>'
                 
+                inner += '</div>' # cal-content 終了
+                
                 # 今日の強調
                 today_cls = "cal-today" if this_date == today_jst else ""
-                cal_html += f'<div class="cal-box {today_cls}">{inner}</div>'
+                
+                # aタグで全体を囲み、タップ可能にする（クエリパラメータを付与）
+                cal_html += f'<a href="?date={date_str}" target="_self" class="cal-box {today_cls}">{bg_html}{inner}</a>'
     
     st.markdown(cal_html + '</div>', unsafe_allow_html=True)
 
-    # 4. 詳細表示用の日付選択（タップの代わり）
-    st.divider()
-    selected_date = st.date_input("詳細を見たい日を選択", value=today_jst)
-    sel_str = str(selected_date)
+    # 4. タップされた日付の詳細表示（クエリパラメータから取得）
+    selected_date = st.query_params.get("date")
     
-    with st.container(border=True):
-        st.markdown(f"### 📅 {sel_str} の詳細")
-        day_events = [e for e in sorted_events if e.get("date") == sel_str]
-        for e in day_events:
-            st.info(f"【{e.get('time') or '終日'}】{e['title']}")
+    if selected_date:
+        st.divider()
+        with st.container(border=True):
+            col_title, col_btn = st.columns([0.8, 0.2])
+            col_title.markdown(f"### 📅 {selected_date} の詳細")
+            
+            # 閉じるボタン
+            if col_btn.button("❌ 閉じる", key="close_btn"):
+                if "date" in st.query_params:
+                    del st.query_params["date"]
+                st.rerun()
+            
+            day_events = [e for e in sorted_events if e.get("date") == selected_date]
+            
+            if not day_events:
+                st.write("予定はありません。")
+                
+            for e in day_events:
+                st.info(f"【{e.get('time') or '終日'}】{e['title']}")
 
     # --- 家計簿エリア ---
     st.divider()
