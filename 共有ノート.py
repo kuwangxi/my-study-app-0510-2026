@@ -221,7 +221,7 @@ def render_thread_info(item):
 
 tab1, tab2, tab3, tab4 = st.tabs(["📍 行きたい", "📅 予定一覧", "🗓️ カレンダー", "🚫 NG日"])
 
-# --- タブ1: 行きたい (コメントを左に、編集を右に入れ替え) ---
+# --- タブ1: 行きたい ---
 with tab1:
     with st.expander("＋ 新しい場所を追加"):
         t = st.text_input("場所/内容", key="input_title_wish")
@@ -235,14 +235,15 @@ with tab1:
     for item in sorted(wish_items, key=get_latest_activity_time, reverse=True):
         with st.container(border=True):
             st.markdown(f"### {item['title']}")
-            if item.get("url"): st.link_button("🔗 サイトを見る", item["url"])
+            # 修正: URLが確実に表示されるようにマークダウンリンクで表示
+            if item.get("url"): st.markdown(f"🔗 **参考リンク:** [{item['url']}]({item['url']})")
             if item.get("time"): st.markdown(f"<span class='time-badge'>⏰ {item['time']}</span>", unsafe_allow_html=True)
             render_thread_info(item)
             
-            # --- ここでカラム順を入れ替え ---
+            # コメントを左、編集を右
             c_msg, c_edit = st.columns(2) 
             
-            with c_msg: # 左側：コメントと確定
+            with c_msg: 
                 with st.expander("💬 コメント・確定"):
                     for c in sorted(item.get("comments", []), key=lambda x: x.get('createdAt', '')):
                         c_user = c.get('userName', '不明'); c_color = st.session_state.room_user_colors.get(c_user, "#999999")
@@ -259,7 +260,7 @@ with tab1:
                     if st.button("カレンダーへ確定", key=f"fbtn_{item['id']}", use_container_width=True):
                         get_events_ref().document(item['id']).update({"status": "scheduled", "date": str(sd), "time": st_time}); st.rerun()
 
-            with c_edit: # 右側：編集と削除
+            with c_edit: 
                 with st.expander("📝 項目を編集・削除"):
                     et = st.text_input("名称修正", value=item['title'], key=f"etw_{item['id']}")
                     eu = st.text_input("URL修正", value=item.get('url',''), key=f"euw_{item['id']}")
@@ -315,7 +316,7 @@ with tab3:
 
     # --- 家計簿エリア ---
     st.divider()
-    with st.expander("💰 共有貯金・家計簿", expanded=False):
+    with st.expander("💰 共有貯金・家計簿 (修正・削除もこちら)", expanded=False):
         room_doc = get_rooms_ref().document(room_key).get()
         f_settings = room_doc.to_dict().get("finance_settings", {}) if room_doc.exists else {}
         f_start_date = f_settings.get("start_date", str(today_jst.replace(day=1)))
@@ -367,3 +368,16 @@ with tab4:
     nd, nt = st.date_input("日付", value=today_jst, key="ng_in"), time_selector_ui("ng_time_in")
     if st.button("NG登録", type="primary", use_container_width=True):
         get_ng_ref().add({"roomKey": room_key, "userName": user_name, "date": str(nd), "time": nt, "createdAt": get_jst_now().isoformat()}); st.rerun()
+    
+    # 修正: 消えてしまっていたNG日のリスト表示・編集・削除機能を復元
+    st.divider()
+    st.write("▼ 登録済みのNG日（編集・削除）")
+    for n in sorted(ng_dates, key=lambda x: x["date"]):
+        with st.expander(f"🚫 {n['date']} ({n.get('time', '終日')}) - {n.get('userName', '不明')}"):
+            end = st.date_input("日付変更", value=datetime.strptime(n['date'], "%Y-%m-%d").date(), key=f"end_{n['id']}")
+            ent = time_selector_ui(f"ent_{n['id']}", default_val=n.get('time', '終日'))
+            c_u, c_d = st.columns(2)
+            if c_u.button("更新", key=f"upd_ng_{n['id']}", use_container_width=True):
+                get_ng_ref().document(n['id']).update({"date": str(end), "time": ent}); st.rerun()
+            if c_d.button("🗑️ 削除", key=f"del_ng_{n['id']}", use_container_width=True):
+                get_ng_ref().document(n['id']).delete(); st.rerun()
