@@ -135,6 +135,7 @@ st.markdown(f"""
     .time-badge {{ background-color: rgba(128, 128, 128, 0.2); padding: 2px 6px; border-radius: 4px; font-size: 0.8em; }}
     .weather-bg {{ position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 3em; opacity: 0.15; pointer-events: none; z-index: 0; }}
     .expense-dot {{ background-color: transparent !important; color: #ef4444; border: none !important; font-weight: bold; font-size: 0.75em; text-align: right; }}
+    .memo-text {{ font-size: 0.85em; color: gray; margin-bottom: 5px; background: rgba(128, 128, 128, 0.05); padding: 5px; border-radius: 4px; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -227,15 +228,17 @@ with tab1:
     with st.expander("＋ 新しい場所を追加"):
         t = st.text_input("場所/内容", key="input_title_wish")
         u = st.text_input("URL (任意)", key="input_url_wish")
+        m = st.text_area("メモ (任意)", key="input_memo_wish")
         wt = time_selector_ui("wish_add")
         if st.button("リストに追加", type="primary"):
             if t:
-                get_events_ref().add({"roomKey": room_key, "title": t, "url": u, "status": "wishlist", "comments": [], "time": wt, "createdAt": get_jst_now().isoformat()}); st.rerun()
+                get_events_ref().add({"roomKey": room_key, "title": t, "url": u, "memo": m, "status": "wishlist", "comments": [], "time": wt, "createdAt": get_jst_now().isoformat()}); st.rerun()
     
     wish_items = [e for e in events if e.get("status") == "wishlist"]
     for item in sorted(wish_items, key=get_latest_activity_time, reverse=True):
         with st.container(border=True):
             st.markdown(f"### {item['title']}")
+            if item.get("memo"): st.markdown(f'<div class="memo-text">📝 {item["memo"]}</div>', unsafe_allow_html=True)
             if item.get("url"): st.markdown(f"🔗 **参考リンク:** [{item['url']}]({item['url']})")
             if item.get("time"): st.markdown(f"<span class='time-badge'>⏰ {item['time']}</span>", unsafe_allow_html=True)
             render_thread_info(item)
@@ -263,8 +266,9 @@ with tab1:
                 with st.expander("📝 項目を編集・削除"):
                     et = st.text_input("名称修正", value=item['title'], key=f"etw_{item['id']}")
                     eu = st.text_input("URL修正", value=item.get('url',''), key=f"euw_{item['id']}")
+                    em = st.text_area("メモ修正", value=item.get('memo',''), key=f"emw_{item['id']}")
                     if st.button("更新を保存", key=f"ubw_{item['id']}", use_container_width=True):
-                        get_events_ref().document(item['id']).update({"title": et, "url": eu}); st.rerun()
+                        get_events_ref().document(item['id']).update({"title": et, "url": eu, "memo": em}); st.rerun()
                     st.write("---")
                     if st.button("🗑️ この場所を削除", key=f"dbw_{item['id']}", use_container_width=True):
                         get_events_ref().document(item['id']).delete(); st.rerun()
@@ -272,7 +276,17 @@ with tab1:
 # --- タブ2: 予定一覧 ---
 with tab2:
     sched_items = sorted([e for e in events if e.get("status") == "scheduled"], key=lambda x: x["date"])
-    for item in sched_items:
+    today_str = str(today_jst)
+    
+    # 予定を「未来」と「過去」に分類
+    future_items = [e for e in sched_items if e["date"] >= today_str]
+    past_items = [e for e in sched_items if e["date"] < today_str]
+    
+    st.subheader("🚀 これからの予定")
+    if not future_items:
+        st.info("これからの予定はありません")
+        
+    for item in future_items:
         with st.container(border=True):
             st.write(f"📅 {item['date']} {item.get('time','')}")
             st.markdown(f"**{item['title']}**")
@@ -285,6 +299,25 @@ with tab2:
                     get_events_ref().document(item['id']).update({"title": new_title, "date": str(new_date), "time": new_time}); st.rerun()
                 if c_d.button("🗑️ 削除", key=f"del_{item['id']}", use_container_width=True):
                     get_events_ref().document(item['id']).delete(); st.rerun()
+
+    # 過去の予定を折り畳む
+    if past_items:
+        st.divider()
+        with st.expander("✅ 終わった予定・過去のログを表示"):
+            # 新しい順に並び替えて表示
+            for item in sorted(past_items, key=lambda x: x["date"], reverse=True):
+                with st.container(border=True):
+                    st.write(f"📅 {item['date']} {item.get('time','')}")
+                    st.markdown(f"**{item['title']}**")
+                    with st.expander("📝 編集・削除"):
+                        new_title = st.text_input("内容", value=item['title'], key=f"edit_t_past_{item['id']}")
+                        new_date = st.date_input("日付", value=datetime.strptime(item['date'], "%Y-%m-%d").date(), key=f"edit_d_past_{item['id']}")
+                        new_time = time_selector_ui(f"edit_tm_past_{item['id']}", default_val=item.get('time', 'カスタム'))
+                        c_u, c_d = st.columns(2)
+                        if c_u.button("更新", key=f"save_past_{item['id']}", use_container_width=True):
+                            get_events_ref().document(item['id']).update({"title": new_title, "date": str(new_date), "time": new_time}); st.rerun()
+                        if c_d.button("🗑️ 削除", key=f"del_past_{item['id']}", use_container_width=True):
+                            get_events_ref().document(item['id']).delete(); st.rerun()
 
 # --- タブ3: カレンダー ---
 with tab3:
