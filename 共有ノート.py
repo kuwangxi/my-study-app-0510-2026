@@ -142,7 +142,7 @@ st.markdown(f"""
 # 2. ログイン処理
 # ==========================================
 if "is_logged" not in st.session_state:
-    q_room, q_user = st.query_params.get("room"), st.query_params.get("user")
+    q_room, q_user = st.query_params.get("room"), q_user = st.query_params.get("user")
     if q_room and q_user:
         st.session_state.room_key, st.session_state.user_name, st.session_state.is_logged = q_room, q_user, True
         load_app_settings(q_room)
@@ -235,12 +235,10 @@ with tab1:
     for item in sorted(wish_items, key=get_latest_activity_time, reverse=True):
         with st.container(border=True):
             st.markdown(f"### {item['title']}")
-            # 修正: URLが確実に表示されるようにマークダウンリンクで表示
             if item.get("url"): st.markdown(f"🔗 **参考リンク:** [{item['url']}]({item['url']})")
             if item.get("time"): st.markdown(f"<span class='time-badge'>⏰ {item['time']}</span>", unsafe_allow_html=True)
             render_thread_info(item)
             
-            # コメントを左、編集を右
             c_msg, c_edit = st.columns(2) 
             
             with c_msg: 
@@ -365,19 +363,23 @@ with tab3:
 
 # --- タブ4: NG日 ---
 with tab4:
+    # 登録エリアにメモ追加
     nd, nt = st.date_input("日付", value=today_jst, key="ng_in"), time_selector_ui("ng_time_in")
+    n_memo = st.text_input("メモ (任意)", key="ng_memo_in")
     if st.button("NG登録", type="primary", use_container_width=True):
-        get_ng_ref().add({"roomKey": room_key, "userName": user_name, "date": str(nd), "time": nt, "createdAt": get_jst_now().isoformat()}); st.rerun()
+        get_ng_ref().add({"roomKey": room_key, "userName": user_name, "date": str(nd), "time": nt, "memo": n_memo, "createdAt": get_jst_now().isoformat()}); st.rerun()
     
-    # 修正: 消えてしまっていたNG日のリスト表示・編集・削除機能を復元
     st.divider()
     st.write("▼ 登録済みのNG日（編集・削除）")
     for n in sorted(ng_dates, key=lambda x: x["date"]):
-        with st.expander(f"🚫 {n['date']} ({n.get('time', '終日')}) - {n.get('userName', '不明')}"):
+        # リストのタイトルにメモを表示
+        memo_disp = f" - {n['memo']}" if n.get("memo") else ""
+        with st.expander(f"🚫 {n['date']} ({n.get('time', '終日')}) - {n.get('userName', '不明')}{memo_disp}"):
             end = st.date_input("日付変更", value=datetime.strptime(n['date'], "%Y-%m-%d").date(), key=f"end_{n['id']}")
             ent = time_selector_ui(f"ent_{n['id']}", default_val=n.get('time', '終日'))
+            enm = st.text_input("メモ変更", value=n.get('memo', ''), key=f"enm_{n['id']}")
             c_u, c_d = st.columns(2)
             if c_u.button("更新", key=f"upd_ng_{n['id']}", use_container_width=True):
-                get_ng_ref().document(n['id']).update({"date": str(end), "time": ent}); st.rerun()
+                get_ng_ref().document(n['id']).update({"date": str(end), "time": ent, "memo": enm}); st.rerun()
             if c_d.button("🗑️ 削除", key=f"del_ng_{n['id']}", use_container_width=True):
                 get_ng_ref().document(n['id']).delete(); st.rerun()
