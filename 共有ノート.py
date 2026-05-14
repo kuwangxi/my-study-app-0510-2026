@@ -232,7 +232,19 @@ with tab1:
         wt = time_selector_ui("wish_add")
         if st.button("リストに追加", type="primary"):
             if t:
-                get_events_ref().add({"roomKey": room_key, "title": t, "url": u, "memo": m, "status": "wishlist", "comments": [], "time": wt, "createdAt": get_jst_now().isoformat()}); st.rerun()
+                # データを保存
+                get_events_ref().add({
+                    "roomKey": room_key, "title": t, "url": u, "memo": m, 
+                    "status": "wishlist", "comments": [], "time": wt, 
+                    "createdAt": get_jst_now().isoformat()
+                })
+                
+                # 入力欄を空っぽにする（ここを追加！）
+                st.session_state["input_title_wish"] = ""
+                st.session_state["input_url_wish"] = ""
+                st.session_state["input_memo_wish"] = ""
+                
+                st.rerun()
     
     wish_items = [e for e in events if e.get("status") == "wishlist"]
     for item in sorted(wish_items, key=get_latest_activity_time, reverse=True):
