@@ -96,7 +96,7 @@ def time_selector_ui(key_prefix, default_val="カスタム"):
 @st.cache_data(ttl=3600)
 def get_shinjuku_weather():
     try:
-        # 緯度経度は新宿。dailyに温度(最高/最低)を追加
+        # dailyに温度(最高/最低)を追加
         url = "https://api.open-meteo.com/v1/forecast?latitude=35.6895&longitude=139.7005&daily=weathercode,windspeed_10m_max,temperature_2m_max,temperature_2m_min&timezone=Asia%2FTokyo&past_days=7&forecast_days=14"
         res = requests.get(url).json()
         w_map = {}
@@ -107,18 +107,18 @@ def get_shinjuku_weather():
             t_max = res['daily']['temperature_2m_max'][i]
             t_min = res['daily']['temperature_2m_min'][i]
             
-            # 天気アイコン
-            if code in [0, 1]: mark = "☀️"
-            elif code in [2, 3]: mark = "☁️"
-            elif code in [45, 48]: mark = "🌫️"
-            elif code in [51,53,55,56,57,61,63,65,66,67,80,81,82]: mark = "☔"
-            elif code in [71,73,75,77,85,86]: mark = "⛄"
-            elif code in [95,96,99]: mark = "⚡"
-            else: mark = ""
+            # 天気アイコンと詳細テキスト
+            if code in [0, 1]: mark, desc = "☀️", "晴れ"
+            elif code in [2, 3]: mark, desc = "☁️", "曇り"
+            elif code in [45, 48]: mark, desc = "🌫️", "霧"
+            elif code in [51,53,55,56,57,61,63,65,66,67,80,81,82]: mark, desc = "☔", "雨"
+            elif code in [71,73,75,77,85,86]: mark, desc = "⛄", "雪"
+            elif code in [95,96,99]: mark, desc = "⚡", "雷雨"
+            else: mark, desc = "", "不明"
 
-            # 辞書に保存（風は数字の丸め込みのみ、気温も整数に）
             w_map[date_str] = {
                 "mark": mark, 
+                "desc": desc,
                 "wind": round(wind, 1), 
                 "t_max": round(t_max), 
                 "t_min": round(t_min)
@@ -474,44 +474,51 @@ with tab3:
     with st.container(border=True):
         st.markdown(f"### 📅 {sel_str} の詳細")
         
-        # --- 0. 天気情報の表示 ---
-        if sel_str in weather_data:
-            w = weather_data[sel_str]
-            # 気温や風速のデータがある場合に表示（キー名は現在の設計に合わせています）
-            t_max = f"{w['temp_max']}°C" if 'temp_max' in w else "--°C"
-            t_min = f"{w['temp_min']}°C" if 'temp_min' in w else "--°C"
-            wind = w.get('wind', '--m/s')
-            desc = w.get('desc', '情報なし') # 「晴れ」「時々雨」などの詳細テキスト
-            
-            st.markdown(f"""
-            <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 10px; margin-bottom: 10px;">
-                <span style="font-size: 1.5em;">{w.get('mark', '🌡️')}</span> <b>{desc}</b><br>
-                <span style="color: #f43f5e;">最高: {t_max}</span> / 
-                <span style="color: #3b82f6;">最低: {t_min}</span> <br>
-                <span style="font-size: 0.9em; color: gray;">💨 風速: {wind}</span>
-            </div>
-            """, unsafe_allow_html=True)
+        # --- 背景（天気情報）の構築 ---
+                bg_info = ""
+                if date_str in weather_data:
+                    w = weather_data[date_str]
+                    bg_info = f'''
+                    <div class="cal-bg-info">
+                        <div class="bg-weather-mark">{w['mark']}</div>
+                        <div class="bg-temp">
+                            <span style="color:#ff4b4b;">{w['t_max']}°</span> / 
+                            <span style="color:#3b82f6;">{w['t_min']}°</span>
+                        </div>
+                        <div class="bg-wind">💨 {w['wind']}m</div>
+                    </div>
+                    '''
 
-        # --- 1. 予定（📍）の表示 ---
-        day_events = [e for e in sorted_events if e.get("date") == sel_str]
-        for e in day_events:
-            st.info(f"📍 【{e.get('time') or '終日'}】 {e['title']}")
-        
-        # --- 2. NG日（🚫）の表示 ---
-        day_ngs = [n for n in ng_dates if n.get("date") == sel_str]
-        for n in day_ngs:
-            memo_part = f" ： {n['memo']}" if n.get("memo") else ""
-            st.error(f"🚫 【{n.get('time') or '終日'}】 {n.get('userName', '不明')} さんのNG{memo_part}")
+                # --- 表面（コンテンツ）の構築 ---
+                inner_content = f'<div class="cal-date">{day}</div>'
+                
+                # 生理・排卵予定
+                if date_str in period_dates:
+                    for p_type, p_mark in period_dates[date_str]:
+                        color = "#f43f5e" if p_type == "period" else "#fbbf24"
+                        inner_content += f'<div class="cal-dot" style="color: {color};">{p_mark}</div>'
+                
+                # 予定
+                for e in [e for e in events if e.get("date") == date_str]:
+                    inner_content += f'<div class="cal-dot event-dot">📍 {e["title"]}</div>'
+                
+                # NG日
+                for n in [n for n in ng_dates if n.get("date") == date_str]:
+                    inner_content += f'<div class="cal-dot ng-dot">🚫 {n.get("userName")}</div>'
+                
+                # 家計簿（支出）
+                day_expenses = [f['amount'] for f in finances if f.get('date') == date_str]
+                if day_expenses:
+                    inner_content += f'<div class="cal-dot expense-dot">💸 -{sum(day_expenses):,}</div>'
 
-        # --- 3. 生理予定（🌙）の表示 ---
-        if sel_str in period_dates:
-            for p_type, p_mark in period_dates[sel_str]:
-                label = "生理予定日" if p_type == "period" else "排卵予定日"
-                st.warning(f"{p_mark} {label}")
-        
-        # 何も予定がない場合
-        if not day_events and not day_ngs and sel_str not in period_dates and sel_str not in weather_data:
-            st.write("この日の情報はありません。")
+                # HTML結合（背景の上にコンテンツを重ねる）
+                today_cls = "cal-today" if this_date == today_jst else ""
+                cal_html += f'''
+                <div class="cal-box {today_cls}">
+                    {bg_info}
+                    <div class="cal-content">{inner_content}</div>
+                </div>
+                '''
     # --- 家計簿エリア ---
     st.divider()
     with st.expander("💰 共有貯金", expanded=False):
