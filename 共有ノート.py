@@ -404,33 +404,11 @@ with tab2:
 
 # --- タブ3: カレンダー ---
 with tab3:
-    # 1. 詳細表示用のダイアログ関数を定義
-    @st.experimental_dialog("予定の詳細")
-    def show_date_details(date_str, day_events, day_ng, day_fin):
-        st.write(f"### 📅 {date_str}")
-        if not day_events and not day_ng and not day_fin:
-            st.write("この日の予定はありません。")
-        else:
-            if day_events:
-                st.subheader("📍 予定")
-                for e in day_events:
-                    st.info(f"**{e.get('time') or '終日'}**\n\n{e['title']}")
-            if day_ng:
-                st.subheader("🚫 NG日")
-                for n in day_ng:
-                    st.warning(f"{n.get('userName')} さん")
-            if day_fin:
-                st.subheader("💸 支出")
-                for f in day_fin:
-                    st.error(f"{f.get('memo','')} : ¥{f['amount']:,}")
-        if st.button("閉じる", use_container_width=True):
-            st.rerun()
-
     # データの準備
     sorted_events = sorted(events, key=lambda x: str(x.get("time") or "23:59"))
     finances = [{"id": d.id, **d.to_dict()} for d in get_finances_ref().where("roomKey", "==", room_key).stream()]
     
-    # 2. 月移動ヘッダー
+    # 1. 月移動ヘッダー
     cm1, cm2, cm3 = st.columns([1, 2, 1])
     if cm1.button("◀ 前月", key="prev_m"): 
         st.session_state.current_month = (st.session_state.current_month - timedelta(days=1)).replace(day=1); st.rerun()
@@ -438,42 +416,95 @@ with tab3:
     if cm3.button("次月 ▶", key="next_m"): 
         st.session_state.current_month = (st.session_state.current_month + timedelta(days=32)).replace(day=1); st.rerun()
 
-    # 3. カレンダーの描画 (ボタン方式)
-    # 曜日のヘッダー
-    cols = st.columns(7)
-    weekdays = ["月", "火", "水", "木", "金", "土", "日"]
-    for i, w in enumerate(weekdays):
-        cols[i].markdown(f"<div style='text-align:center; font-weight:bold; font-size:0.8em;'>{w}</div>", unsafe_allow_html=True)
-
+    # 2. カレンダーHTMLの構築
+    cal_html = '<div class="cal-grid">'
+    for w in ["月", "火", "水", "木", "金", "土", "日"]: 
+        cal_html += f'<div class="cal-header-item">{w}</div>'
+    
     month_days = calendar.Calendar(0).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
     
     for week in month_days:
-        cols = st.columns(7)
-        for i, day in enumerate(week):
+        for day in week:
             if day == 0:
-                continue
-            
-            this_date = st.session_state.current_month.replace(day=day)
-            date_str = str(this_date)
-            
-            # その日のデータを抽出
-            d_events = [e for e in sorted_events if e.get("date") == date_str]
-            d_ng = [n for n in ng_dates if n.get("date") == date_str]
-            d_fin = [f for f in finances if f.get("date") == date_str]
-            
-            # ボタンのラベル（日付 + 予定数などの簡易表示）
-            label = f"{day}"
-            if d_events: label += f"\n📍{len(d_events)}"
-            if d_ng: label += f"\n🚫"
-            if d_fin: label += f"\n¥"
+                cal_html += '<div></div>'
+            else:
+                this_date = st.session_state.current_month.replace(day=day)
+                date_str = str(this_date)
+                
+                # 天気データの取得
+                w_info = weather_data.get(date_str, {})
+                w_mark = w_info.get("mark", "")
+                w_wind = w_info.get("wind", "")
+                w_tmax = w_info.get("t_max", "")
+                w_tmin = w_info.get("t_min", "")
+                
+                # 背景の天気・気温・風速（なじませ表示）
+                bg_html = ""
+                if w_info:
+                    bg_html = f'''
+                    <div class="cal-bg-info">
+                        <div class="bg-weather-mark">{w_mark}</div>
+                        <div class="bg-temp">{w_tmax} / {w_tmin}</div>
+                        <div class="bg-wind">{w_wind}m/s</div>
+                    </div>
+                    '''
+                
+                # コンテンツ（日付と予定ドット）
+                inner = f'<div class="cal-content"><div class="cal-date">{day}</div>'
+                for e in [e for e in events if e.get("date") == date_str]:
+                    inner += f'<div class="cal-dot event-dot">📍 {e["title"]}</div>'
+                for n in [n for n in ng_dates if n.get("date") == date_str]:
+                    inner += f'<div class="cal-dot ng-dot">🚫 {n.get("userName")}</div>'
+                
+                day_expenses = [f['amount'] for f in finances if f.get('date') == date_str]
+                if day_expenses:
+                    inner += f'<div class="cal-dot expense-dot">¥{sum(day_expenses):,}</div>'
+                inner += '</div>'
+                
+                today_cls = "cal-today" if this_date == today_jst else ""
+                
+                # ★重要：ログイン情報を維持するためのリンク修正
+                link_url = f"?room={room_key}&user={st.session_state.user_name}&date={date_str}"
+                cal_html += f'<a href="{link_url}" target="_self" class="cal-box {today_cls}">{bg_html}{inner}</a>'
+    
+    st.markdown(cal_html + '</div>', unsafe_allow_html=True)
 
-            # 今日の色を変える
-            type_style = "primary" if this_date == today_jst else "secondary"
+    # 3. タップされた日付の詳細表示（ログイン画面に戻らない工夫）
+    selected_date = st.query_params.get("date")
+    if selected_date:
+        st.write("") # スペース用
+        # カード形式で詳細を表示
+        with st.container(border=True):
+            col_t, col_b = st.columns([0.8, 0.2])
+            col_t.subheader(f"📅 {selected_date} の詳細")
             
-            # --- 日付ボタンの配置 ---
-            if cols[i].button(label, key=f"btn_{date_str}", use_container_width=True, type=type_style):
-                show_date_details(date_str, d_events, d_ng, d_fin)
+            # 「閉じる」ボタン：URLからdateを消してリロード
+            if col_b.button("❌ 閉じる", use_container_width=True):
+                st.query_params.clear() # 一旦クリア
+                st.query_params["room"] = room_key
+                st.query_params["user"] = st.session_state.user_name
+                st.rerun()
+            
+            # その日の予定を表示
+            day_events = [e for e in sorted_events if e.get("date") == selected_date]
+            day_ng = [n for n in ng_dates if n.get("date") == selected_date]
+            day_fin = [f for f in finances if f.get("date") == selected_date]
 
+            if not day_events and not day_ng and not day_fin:
+                st.write("この日の予定や記録はありません。")
+            else:
+                if day_events:
+                    st.write("**【予定】**")
+                    for e in day_events:
+                        st.info(f"⏰ {e.get('time') or '終日'} : {e['title']}")
+                if day_ng:
+                    st.write("**【NG日】**")
+                    for n in day_ng:
+                        st.warning(f"🚫 {n.get('userName')} さんがNG")
+                if day_fin:
+                    st.write("**【支出】**")
+                    for f in day_fin:
+                        st.error(f"💸 {f.get('memo','')} : ¥{f['amount']:,}")
     # --- 家計簿エリア ---
     st.divider()
     with st.expander("💰 共有貯金", expanded=False):
