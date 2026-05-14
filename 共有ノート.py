@@ -498,7 +498,7 @@ with tab3:
                 # --- 表面（コンテンツ）の構築 ---
                 inner_content = f'<div class="cal-date">{day}</div>'
                 
-                # --- 生理予定・排卵予定の表示 ---
+               # --- 生理予定・排卵予定の表示 ---
                 if date_str in period_dates:
                     for p_type, p_mark in period_dates[date_str]:
                         if p_type == "period":
