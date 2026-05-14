@@ -359,10 +359,15 @@ with tab2:
 
 # --- タブ3: カレンダー ---
 with tab3:
-    # 1. データの準備（予定を時間順にソート）
-    # 時間が入っていない予定は後ろにくるようにします
-    sorted_events = sorted(events, key=lambda x: x.get("time", "23:59"))
+    # 【修正ポイント】str() と or を使って、Noneを確実に文字列に変換します
+    # これにより、時間の入っていない予定は自動的に "23:59"（最後の方）として扱われます
+    sorted_events = sorted(events, key=lambda x: str(x.get("time") or "23:59"))
+    
     finances = [{"id": d.id, **d.to_dict()} for d in get_finances_ref().where("roomKey", "==", room_key).stream()]
+    
+    # --- 以降のコード（selected_date_str の設定など）は変更なし ---
+    if "selected_date_str" not in st.session_state:
+        st.session_state.selected_date_str = str(today_jst)
     
     # 選択された日付を保持する状態
     if "selected_date_str" not in st.session_state:
