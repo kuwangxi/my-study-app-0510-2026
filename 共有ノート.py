@@ -466,8 +466,9 @@ with tab3:
                 # 今日の強調
                 today_cls = "cal-today" if this_date == today_jst else ""
                 
-                # aタグで全体を囲み、タップ可能にする（クエリパラメータを付与）
-                cal_html += f'<a href="?date={date_str}" target="_self" class="cal-box {today_cls}">{bg_html}{inner}</a>'
+                # 現在のURLパラメータを維持しつつ日付を追加するリンク
+link_url = f"?room={st.session_state.room_key}&user={st.session_state.user_name}&date={date_str}"
+cal_html += f'<a href="{link_url}" target="_self" class="cal-box {today_cls}">{bg_html}{inner}</a>'
     
     st.markdown(cal_html + '</div>', unsafe_allow_html=True)
 
