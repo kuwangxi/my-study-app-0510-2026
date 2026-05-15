@@ -403,107 +403,100 @@ with tab3:
     if "selected_date" not in st.session_state:
         st.session_state.selected_date = today_jst
 
-    # 💡【新機能】URLを汚さずにタップイベントをPythonに伝えるための「隠し入力フィールド」
-    st.markdown('<div style="display:none;">', unsafe_allow_html=True)
-    js_date = st.text_input("hidden_picker", key="js_date_bridge", value=str(st.session_state.selected_date), placeholder="js_date_input")
-    st.markdown('</div>', unsafe_allow_html=True)
+    # 💡【重要】カレンダー内のボタンをスマホで見やすく、ドットっぽく綺麗に整える専用CSS
+    st.markdown(f"""
+    <style>
+        /* カレンダーのマス(カラム)自体の最小高さを確保して枠線を引く */
+        div[data-testid="stColumn"] {{
+            min-height: 85px;
+            border: 1px solid rgba(128, 128, 128, 0.15);
+            border-radius: 4px;
+            padding: 3px !important;
+            background-color: var(--background-color);
+        }}
+        /* Streamlitのボタンをカレンダーの予定パネル風にカスタム */
+        .stButton > button {{
+            padding: 3px 5px !important;
+            font-size: 0.72em !important;
+            line-height: 1.2 !important;
+            border-radius: 4px !important;
+            width: 100% !important;
+            text-align: left !important;
+            margin: 2px 0 !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            border: 1px solid rgba(128, 128, 128, 0.2) !important;
+            background-color: var(--secondary-background-color) !important;
+        }}
+        /* 日付ボタン（予定がない日もタップできるように一番上に配置） */
+        div[data-testid="stButton"] {{
+            margin: 0 !important;
+            padding: 0 !important;
+        }}
+    </style>
+    """, unsafe_allow_html=True)
 
-    # JavaScript側から日付が送られてきたら、状態を更新して画面をスムーズに再描画する
-    if js_date and js_date != str(st.session_state.selected_date):
-        try:
-            st.session_state.selected_date = datetime.strptime(js_date, "%Y-%m-%d").date()
-            st.rerun()
-        except: pass
-
-    # 2. カレンダーHTMLの構築
-    cal_html = '<div class="cal-grid">'
-    for w in ["日", "月", "火", "水", "木", "金", "土"]: 
-        cal_html += f'<div class="cal-header-item">{w}</div>'
-    
+    # 2. カレンダーヘッダー（曜日）
+    weekdays = ["日", "月", "火", "水", "木", "金", "土"]
+    hdr_cols = st.columns(7)
+    for i, w in enumerate(weekdays):
+        hdr_cols[i].markdown(f"<center><b style='font-size:0.85em;'>{w}</b></center>", unsafe_allow_html=True)
+        
+    # カレンダーの日にちマトリクスを取得
     month_days = calendar.Calendar(6).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
     
-    for week in month_days:
-        for day in week:
+    # 3. カレンダーマスの配置
+    for week_idx, week in enumerate(month_days):
+        cols = st.columns(7)
+        for i, day in enumerate(week):
             if day == 0:
-                cal_html += '<div></div>'
-            else:
-                this_date = st.session_state.current_month.replace(day=day)
-                date_str = str(this_date)
+                # 月の外の空欄マス
+                cols[i].markdown("<div style='min-height:85px; border:none; background:transparent;'></div>", unsafe_allow_html=True)
+                continue
                 
-                # 天気データの取得
-                w_info = weather_data.get(date_str, {"mark": "", "wind": ""})
-                w_mark = w_info["mark"]
-                w_wind = w_info["wind"]
-                
-                # 背景の天気画像（アイコン）
-                bg_weather = f'<div class="weather-bg">{w_mark}</div>' if w_mark else ""
-                
-                # アイコンや風情報の構築
-                inner = f'<div class="cal-date">{day}</div>{bg_weather}'
-                if w_wind:
-                    inner += f'<div style="font-size:0.55em; color:gray; position:relative; z-index:1;">{w_wind}</div>'
-                
-                # 各種ドット
-                for e in [e for e in events if e.get("date") == date_str]:
-                    inner += f'<div class="cal-dot event-dot" style="font-size:0.6em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">📍 {e["title"]}</div>'
-                for n in [n for n in ng_dates if n.get("date") == date_str]:
-                    inner += f'<div class="cal-dot ng-dot" style="font-size:0.6em;">🚫 {n.get("userName")}</div>'
-                
-                # 生理予定日と排卵日の表示
-                if date_str in period_dates:
-                    for p_type, p_mark in period_dates[date_str]:
-                        inner += f'<div class="cal-dot {p_type}-dot">{p_mark}</div>'
-                
-                day_expenses = [f['amount'] for f in finances if f.get('date') == date_str]
-                if day_expenses:
-                    inner += f'<div class="cal-dot expense-dot">💸 -{sum(day_expenses):,}円</div>'
-                
-                # 今日の強調
-                today_cls = "cal-today" if this_date == today_jst else ""
-                
-                # 💡【修正ポイント】各マスに「タップできる演出(手袋マーク)」と「タップ時に日付を裏で送る命令」を追加
-                cal_html += f'<div class="cal-box {today_cls}" style="cursor: pointer;" onclick="sendDateToStreamlit(\'{date_str}\')">{inner}</div>'
-    
-    st.markdown(cal_html + '</div>', unsafe_allow_html=True)
+            this_date = st.session_state.current_month.replace(day=day)
+            date_str = str(this_date)
+            
+            # 各種データの事前取得（天気、生理、支出）
+            w_info = weather_data.get(date_str, {"mark": "", "wind": ""})
+            w_mark = w_info["mark"]
+            
+            p_info = ""
+            if date_str in period_dates:
+                for p_type, p_mark in period_dates[date_str]: p_info += p_mark
+            
+            day_expenses = [f['amount'] for f in finances if f.get('date') == date_str]
+            if day_expenses: p_info += " 💸"
 
-    # 💡【新機能】カレンダーのタップを感知してStreamlitにEnterキーをシミュレートして届けるJavaScript
-    js_script = """
-    <script>
-    function sendDateToStreamlit(dateStr) {
-        const parentDoc = window.parent.document;
-        const inputs = parentDoc.querySelectorAll('input');
-        let targetInput = null;
-        for (let input of inputs) {
-            if (input.placeholder === 'js_date_input') {
-                targetInput = input;
-                break;
-            }
-        }
-        if (targetInput) {
-            if (targetInput.value === dateStr) return;
-            const lastValue = targetInput.value;
-            targetInput.value = dateStr;
-            const tracker = targetInput._valueTracker;
-            if (tracker) { tracker.setValue(lastValue); }
-            const inputEvent = new Event('input', { bubbles: true });
-            targetInput.dispatchEvent(inputEvent);
-            const enterEvent = new KeyboardEvent('keydown', {
-                bubbles: true, cancelable: true, key: 'Enter', keyCode: 13, which: 13
-            });
-            targetInput.dispatchEvent(enterEvent);
-        }
-    }
-    </script>
-    """
-    st.markdown(js_script, unsafe_allow_html=True)
+            # 日付のボタン文字を構築
+            day_label = f"{day} {w_mark} {p_info}".strip()
+            if this_date == today_jst:
+                day_label = f"📱 {day_label} (今日)"
 
-    # 3. 詳細表示用の日付選択（カレンダータップと完全に自動連動します）
+            with cols[i]:
+                # 💡【修正点①】日付そのものをタップ可能なボタンに（予定がない日もここをタップすれば詳細が開きます）
+                if st.button(day_label, key=f"day_btn_{date_str}_{week_idx}"):
+                    st.session_state.selected_date = this_date
+                    st.rerun()
+                
+                # 💡【修正点②】「📍 予定」そのものを本物のタップ可能なボタンに変更！
+                day_events = [e for e in events if e.get("date") == date_str]
+                for idx, e in enumerate(day_events):
+                    if st.button(f"📍 {e['title']}", key=f"ev_btn_{date_str}_{idx}_{week_idx}"):
+                        st.session_state.selected_date = this_date
+                        st.rerun()
+                        
+                # 💡【修正点③】「🚫 NG日」そのものを本物のタップ可能なボタンに変更！
+                day_ngs = [n for n in ng_dates if n.get("date") == date_str]
+                for idx, n in enumerate(day_ngs):
+                    if st.button(f"🚫 {n.get('userName', '不明')}", key=f"ng_btn_{date_str}_{idx}_{week_idx}"):
+                        st.session_state.selected_date = this_date
+                        st.rerun()
+
+    # 4. タップされた日の詳細表示エリア
     st.divider()
-    selected_date = st.date_input("詳細を見たい日を選択（カレンダータップでも連動）👇", value=st.session_state.selected_date)
-    sel_str = str(selected_date)
-    st.session_state.selected_date = selected_date
-    
-    # 選択された日の天気を詳細欄の上部に表示するおまけ機能
+    sel_str = str(st.session_state.selected_date)
     sel_weather = weather_data.get(sel_str, {"mark": "", "wind": ""})
     weather_header = f" (天気: {sel_weather['mark']})" if sel_weather['mark'] else ""
 
@@ -529,7 +522,7 @@ with tab3:
         
         # 何も予定がない場合
         if not day_events and not day_ngs and sel_str not in period_dates:
-            st.write("この日の予定やNG登録はありません。")
+            st.write("この日の予定やNG登録はありません。カレンダー上の他の日をタップすると詳細が切り替わります。")
 
     # --- 家計簿エリア ---
     st.divider()
