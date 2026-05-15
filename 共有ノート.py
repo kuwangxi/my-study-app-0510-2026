@@ -128,9 +128,25 @@ weather_data = get_shinjuku_weather()
 st.markdown(f"""
 <style>
     html, body, [class*="st-"] {{ font-size: {st.session_state.font_size}px !important; }}
-    .cal-grid {{ display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; width: 100%; margin-top: 10px; }}
+    /* スマホでも強制的に横7列に均等配分する設定 */
+    .cal-grid { 
+        display: grid; 
+        grid-template-columns: repeat(7, minmax(0, 1fr)); 
+        gap: 3px; 
+        width: 100%; 
+        margin-top: 10px; 
+    }
+    /* スマホの画面に収まるよう、最小の高さを少し低く調整 */
+    .cal-box { 
+        border: 1px solid rgba(128, 128, 128, 0.3); 
+        border-radius: 4px; 
+        padding: 2px; 
+        min-height: 65px; 
+        background-color: var(--background-color); 
+        position: relative; 
+        overflow: hidden; 
+    }
     .cal-header-item {{ text-align: center; font-weight: bold; font-size: 0.8em; padding: 5px 0; background-color: var(--secondary-background-color); color: var(--text-color); border-radius: 4px; }}
-    .cal-box {{ border: 1px solid rgba(128, 128, 128, 0.3); border-radius: 4px; padding: 4px; min-height: 85px; background-color: var(--background-color); position: relative; overflow-y: auto; }}
     .cal-date {{ font-size: 0.8em; font-weight: bold; margin-bottom: 2px; color: var(--text-color); }}
     .cal-today {{ border: 2px solid {st.session_state.user_color} !important; background-color: var(--secondary-background-color) !important; }}
     .cal-dot {{ font-size: 0.7em; margin-bottom: 1px; border-radius: 2px; padding: 1px 2px; line-height: 1.1; }}
@@ -371,11 +387,7 @@ with tab3:
     sorted_events = sorted(events, key=lambda x: str(x.get("time") or "23:59"))
     finances = [{"id": d.id, **d.to_dict()} for d in get_finances_ref().where("roomKey", "==", room_key).stream()]
     
-    # 【追加】選択された日付を記憶する「箱」を用意する
-    if "selected_date" not in st.session_state:
-        st.session_state.selected_date = today_jst
-
-    # 月移動ヘッダー
+    # 2. 月移動ヘッダー
     cm1, cm2, cm3 = st.columns([1, 2, 1])
     if cm1.button("◀ 前月", key="prev_m", use_container_width=True): 
         st.session_state.current_month = (st.session_state.current_month - timedelta(days=1)).replace(day=1); st.rerun()
@@ -383,73 +395,71 @@ with tab3:
     if cm3.button("次月 ▶", key="next_m", use_container_width=True): 
         st.session_state.current_month = (st.session_state.current_month + timedelta(days=32)).replace(day=1); st.rerun()
 
-    st.write("---")
+    # 先に詳細表示用データを受け取る箱を用意（カレンダーの上または下に連動）
+    if "selected_date" not in st.session_state:
+        st.session_state.selected_date = today_jst
 
-    # ==========================================
-    # Pythonだけで作るタップ可能なカレンダー
-    # ==========================================
-    # 1. 曜日の表示
-    weekdays = ["日", "月", "火", "水", "木", "金", "土"]
-    cols = st.columns(7)
-    for i, w in enumerate(weekdays):
-        cols[i].markdown(f"<div style='text-align: center; font-size: 0.8em; font-weight: bold;'>{w}</div>", unsafe_allow_html=True)
+    # 3. カレンダーHTMLの構築
+    cal_html = '<div class="cal-grid">'
+    for w in ["日", "月", "火", "水", "木", "金", "土"]: 
+        cal_html += f'<div class="cal-header-item">{w}</div>'
     
-    # 2. カレンダーの計算
     month_days = calendar.Calendar(6).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
     
-    # 3. 日付ボタンを並べるループ
     for week in month_days:
-        cols = st.columns(7) # 7列の枠を作る
-        for i, day in enumerate(week):
+        for day in week:
             if day == 0:
-                cols[i].write("") # 日付がないマスは空白
+                cal_html += '<div></div>'
             else:
                 this_date = st.session_state.current_month.replace(day=day)
                 date_str = str(this_date)
                 
-                # --- ボタンに表示する文字（アイコン）を組み立てる ---
-                # まずは日付
-                btn_text = f"{day}"
+                # 天気データの取得
+                w_info = weather_data.get(date_str, {"mark": "", "wind": ""})
+                w_mark = w_info["mark"]
+                w_wind = w_info["wind"]
                 
-                # 予定やNGがあればアイコンを追加していく
-                icons = []
-                if any(e.get("date") == date_str for e in events): icons.append("📍")
-                if any(n.get("date") == date_str for n in ng_dates): icons.append("🚫")
-                if date_str in period_dates: icons.append("🌙")
+                # 背景の天気画像（アイコン）
+                bg_weather = f'<div class="weather-bg">{w_mark}</div>' if w_mark else ""
+                
+                # アイコンや風情報の構築
+                inner = f'<div class="cal-date">{day}</div>{bg_weather}'
+                if w_wind:
+                    inner += f'<div style="font-size:0.55em; color:gray; position:relative; z-index:1;">{w_wind}</div>'
+                
+                # 各種ドット
+                for e in [e for e in events if e.get("date") == date_str]:
+                    inner += f'<div class="cal-dot event-dot" style="font-size:0.6em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">📍 {e["title"]}</div>'
+                for n in [n for n in ng_dates if n.get("date") == date_str]:
+                    inner += f'<div class="cal-dot ng-dot" style="font-size:0.6em;">🚫 {n.get("userName")}</div>'
+                
+                # 生理予定日と排卵日の表示
+                if date_str in period_dates:
+                    for p_type, p_mark in period_dates[date_str]:
+                        inner += f'<div class="cal-dot {p_type}-dot">{p_mark}</div>'
                 
                 day_expenses = [f['amount'] for f in finances if f.get('date') == date_str]
-                if day_expenses: icons.append("💸")
+                if day_expenses:
+                    inner += f'<div class="cal-dot expense-dot">💸 -{sum(day_expenses):,}円</div>'
                 
-                # アイコンがあれば改行して追加
-                if icons:
-                    btn_text += f"\n{''.join(icons)}"
-                else:
-                    btn_text += "\n" # 高さを揃えるための空行
+                # 今日の強調
+                today_cls = "cal-today" if this_date == today_jst else ""
+                cal_html += f'<div class="cal-box {today_cls}">{inner}</div>'
+    
+    st.markdown(cal_html + '</div>', unsafe_allow_html=True)
 
-                # 今日の日付はボタンの色を変える機能（type="primary"）を使う
-                is_today = (this_date == today_jst)
-                btn_type = "primary" if is_today else "secondary"
-
-                # 天気をツールチップ（長押し・ホバーで表示）に設定
-                w_info = weather_data.get(date_str, {"mark": "", "wind": ""})
-                help_text = f"天気: {w_info['mark']} {w_info['wind']}" if w_info['mark'] else "予定詳細を見る"
-
-                # ★ここでボタンを配置！押されたらsession_stateを書き換えて画面更新★
-                if cols[i].button(btn_text, key=f"cal_btn_{date_str}", use_container_width=True, type=btn_type, help=help_text):
-                    st.session_state.selected_date = this_date
-                    st.rerun()
-
-    # ==========================================
-    # 詳細表示エリア（タップされた日付のデータを表示）
-    # ==========================================
+    # 4. 詳細表示用の日付選択
     st.divider()
-    
-    # st.date_inputも残しておき、連動させる（手入力で遠い未来も見れるように）
-    selected_date = st.date_input("詳細を見たい日を選択（カレンダーをタップでも変更可）", value=st.session_state.selected_date)
+    selected_date = st.date_input("詳細を見たい日を選択してください 👇", value=st.session_state.selected_date)
     sel_str = str(selected_date)
+    st.session_state.selected_date = selected_date
     
+    # 選択された日の天気を詳細欄の上部に表示するおまけ機能
+    sel_weather = weather_data.get(sel_str, {"mark": "", "wind": ""})
+    weather_header = f" (天気: {sel_weather['mark']})" if sel_weather['mark'] else ""
+
     with st.container(border=True):
-        st.markdown(f"### 📅 {sel_str} の詳細")
+        st.markdown(f"### 📅 {sel_str} の詳細{weather_header}")
         
         # --- 1. 予定（📍）の表示 ---
         day_events = [e for e in sorted_events if e.get("date") == sel_str]
