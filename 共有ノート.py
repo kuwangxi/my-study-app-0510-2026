@@ -1,5 +1,4 @@
 import streamlit as st
-from st_click_detector import click_detector
 import firebase_admin
 from firebase_admin import credentials, firestore
 import random
@@ -427,29 +426,16 @@ with tab3:
                 # 今日の強調
                 today_cls = "cal-today" if this_date == today_jst else ""
                 cal_html += f'<div class="cal-box {today_cls}">{inner}</div>'
-                
-                # 【修正ポイント】hrefを "#" にし、idに日付（date_str）を入れる
-                cal_html += f"""
-                <a href="#" id="{date_str}" style="text-decoration: none; color: inherit;">
-                    <div class="cal-box {today_cls}">
-                        {inner}
-                    </div>
-                </a>
-                """
     
-# 【修正ポイント】st.markdownの代わりにclick_detectorを使う
-    # これだけでHTMLの描画と、クリックされた要素のid取得を同時にやってくれます
-    clicked_date = click_detector(cal_html)
+    st.markdown(cal_html + '</div>', unsafe_allow_html=True)
 
-    # もしカレンダーの日付がクリックされていれば、セッション状態を更新
-    if clicked_date:
-        # 文字列（例: "2026-05-15"）を日付データに変換して保存
-        st.session_state.selected_date_val = datetime.strptime(clicked_date, "%Y-%m-%d").date()
-
+    # 4. 詳細表示用の日付選択（タップの代わり）
     st.divider()
-
-    # 詳細表示用の日付選択（ここが連動して切り替わります）
-    selected_date = st.date_input("詳細を見たい日を選択", value=st.session_state.selected_date_val)
+    selected_date = st.date_input("詳細を見たい日を選択", value=today_jst)
+    sel_str = str(selected_date)
+    
+    with st.container(border=True):
+        st.markdown(f"### 📅 {sel_str} の詳細")
         
         # --- 1. 予定（📍）の表示 ---
         day_events = [e for e in sorted_events if e.get("date") == sel_str]
