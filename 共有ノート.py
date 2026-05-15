@@ -391,7 +391,7 @@ with tab3:
     sorted_events = sorted(events, key=lambda x: str(x.get("time") or "23:59"))
     finances = [{"id": d.id, **d.to_dict()} for d in get_finances_ref().where("roomKey", "==", room_key).stream()]
     
-    # 2. 月移動ヘッダー
+    # 1. 月移動ヘッダー
     cm1, cm2, cm3 = st.columns([1, 2, 1])
     if cm1.button("◀ 前月", key="prev_m", use_container_width=True): 
         st.session_state.current_month = (st.session_state.current_month - timedelta(days=1)).replace(day=1); st.rerun()
@@ -399,11 +399,23 @@ with tab3:
     if cm3.button("次月 ▶", key="next_m", use_container_width=True): 
         st.session_state.current_month = (st.session_state.current_month + timedelta(days=32)).replace(day=1); st.rerun()
 
-    # 先に詳細表示用データを受け取る箱を用意（カレンダーの上または下に連動）
+    # 表示用日付の初期化
     if "selected_date" not in st.session_state:
         st.session_state.selected_date = today_jst
 
-    # 3. カレンダーHTMLの構築
+    # 💡【新機能】URLを汚さずにタップイベントをPythonに伝えるための「隠し入力フィールド」
+    st.markdown('<div style="display:none;">', unsafe_allow_html=True)
+    js_date = st.text_input("hidden_picker", key="js_date_bridge", value=str(st.session_state.selected_date), placeholder="js_date_input")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # JavaScript側から日付が送られてきたら、状態を更新して画面をスムーズに再描画する
+    if js_date and js_date != str(st.session_state.selected_date):
+        try:
+            st.session_state.selected_date = datetime.strptime(js_date, "%Y-%m-%d").date()
+            st.rerun()
+        except: pass
+
+    # 2. カレンダーHTMLの構築
     cal_html = '<div class="cal-grid">'
     for w in ["日", "月", "火", "水", "木", "金", "土"]: 
         cal_html += f'<div class="cal-header-item">{w}</div>'
@@ -448,13 +460,46 @@ with tab3:
                 
                 # 今日の強調
                 today_cls = "cal-today" if this_date == today_jst else ""
-                cal_html += f'<div class="cal-box {today_cls}">{inner}</div>'
+                
+                # 💡【修正ポイント】各マスに「タップできる演出(手袋マーク)」と「タップ時に日付を裏で送る命令」を追加
+                cal_html += f'<div class="cal-box {today_cls}" style="cursor: pointer;" onclick="sendDateToStreamlit(\'{date_str}\')">{inner}</div>'
     
     st.markdown(cal_html + '</div>', unsafe_allow_html=True)
 
-    # 4. 詳細表示用の日付選択
+    # 💡【新機能】カレンダーのタップを感知してStreamlitにEnterキーをシミュレートして届けるJavaScript
+    js_script = """
+    <script>
+    function sendDateToStreamlit(dateStr) {
+        const parentDoc = window.parent.document;
+        const inputs = parentDoc.querySelectorAll('input');
+        let targetInput = null;
+        for (let input of inputs) {
+            if (input.placeholder === 'js_date_input') {
+                targetInput = input;
+                break;
+            }
+        }
+        if (targetInput) {
+            if (targetInput.value === dateStr) return;
+            const lastValue = targetInput.value;
+            targetInput.value = dateStr;
+            const tracker = targetInput._valueTracker;
+            if (tracker) { tracker.setValue(lastValue); }
+            const inputEvent = new Event('input', { bubbles: true });
+            targetInput.dispatchEvent(inputEvent);
+            const enterEvent = new KeyboardEvent('keydown', {
+                bubbles: true, cancelable: true, key: 'Enter', keyCode: 13, which: 13
+            });
+            targetInput.dispatchEvent(enterEvent);
+        }
+    }
+    </script>
+    """
+    st.markdown(js_script, unsafe_allow_html=True)
+
+    # 3. 詳細表示用の日付選択（カレンダータップと完全に自動連動します）
     st.divider()
-    selected_date = st.date_input("詳細を見たい日を選択してください 👇", value=st.session_state.selected_date)
+    selected_date = st.date_input("詳細を見たい日を選択（カレンダータップでも連動）👇", value=st.session_state.selected_date)
     sel_str = str(selected_date)
     st.session_state.selected_date = selected_date
     
