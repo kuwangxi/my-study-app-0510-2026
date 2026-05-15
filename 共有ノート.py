@@ -403,18 +403,48 @@ with tab3:
     if "selected_date" not in st.session_state:
         st.session_state.selected_date = today_jst
 
-    # 💡【重要】カレンダー内のボタンをスマホで見やすく、ドットっぽく綺麗に整える専用CSS
+    # 💡【重要】背景の天気・風をなじませ、ボタンを透けさせる新型CSS
     st.markdown(f"""
     <style>
-        /* カレンダーのマス(カラム)自体の最小高さを確保して枠線を引く */
+        /* カレンダーのマス(カラム)を背景の基準位置にする */
         div[data-testid="stColumn"] {{
-            min-height: 85px;
+            position: relative;
+            min-height: 95px; /* 風の強さが入るので高さを少し広げました */
             border: 1px solid rgba(128, 128, 128, 0.15);
             border-radius: 4px;
             padding: 3px !important;
             background-color: var(--background-color);
+            overflow: hidden;
         }}
-        /* Streamlitのボタンをカレンダーの予定パネル風にカスタム */
+        
+        /* 🌤 風と天気を中央にふわっと馴染ませるレイヤー */
+        .cal-bg-layer {{
+            position: absolute;
+            top: 52%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            pointer-events: none; /* タップの邪魔を絶対にしない */
+            z-index: 0;
+            width: 100%;
+        }}
+        .cal-bg-weather {{
+            font-size: 2.3em;
+            opacity: 0.13; /* 主張しすぎない半透明 */
+            line-height: 1;
+        }}
+        .cal-bg-wind {{
+            font-size: 0.62em;
+            opacity: 0.35; /* 文字として読めつつ背景に溶け込む薄さ */
+            color: var(--text-color);
+            margin-top: 1px;
+        }}
+
+        /* ボタンを前面に出し、背景が透けるように半透明化 */
+        .stButton {{
+            position: relative;
+            z-index: 1;
+        }}
         .stButton > button {{
             padding: 3px 5px !important;
             font-size: 0.72em !important;
@@ -426,13 +456,9 @@ with tab3:
             white-space: nowrap !important;
             overflow: hidden !important;
             text-overflow: ellipsis !important;
-            border: 1px solid rgba(128, 128, 128, 0.2) !important;
-            background-color: var(--secondary-background-color) !important;
-        }}
-        /* 日付ボタン（予定がない日もタップできるように一番上に配置） */
-        div[data-testid="stButton"] {{
-            margin: 0 !important;
-            padding: 0 !important;
+            border: 1px solid rgba(128, 128, 128, 0.12) !important;
+            /* 背景が透けて見えるように極薄の塗りに変更 */
+            background-color: rgba(128, 128, 128, 0.08) !important; 
         }}
     </style>
     """, unsafe_allow_html=True)
@@ -451,8 +477,7 @@ with tab3:
         cols = st.columns(7)
         for i, day in enumerate(week):
             if day == 0:
-                # 月の外の空欄マス
-                cols[i].markdown("<div style='min-height:85px; border:none; background:transparent;'></div>", unsafe_allow_html=True)
+                cols[i].markdown("<div style='min-height:95px; border:none; background:transparent;'></div>", unsafe_allow_html=True)
                 continue
                 
             this_date = st.session_state.current_month.replace(day=day)
@@ -461,6 +486,7 @@ with tab3:
             # 各種データの事前取得（天気、生理、支出）
             w_info = weather_data.get(date_str, {"mark": "", "wind": ""})
             w_mark = w_info["mark"]
+            w_wind = w_info["wind"] # 風の情報
             
             p_info = ""
             if date_str in period_dates:
@@ -469,25 +495,34 @@ with tab3:
             day_expenses = [f['amount'] for f in finances if f.get('date') == date_str]
             if day_expenses: p_info += " 💸"
 
-            # 日付のボタン文字を構築
-            day_label = f"{day} {w_mark} {p_info}".strip()
+            # 日付のボタン文字（天気マークは背景に行くのでここからは除外）
+            day_label = f"{day} {p_info}".strip()
             if this_date == today_jst:
                 day_label = f"📱 {day_label} (今日)"
 
             with cols[i]:
-                # 💡【修正点①】日付そのものをタップ可能なボタンに（予定がない日もここをタップすれば詳細が開きます）
+                # 💡【復活！】マスの最背面に天気と風の強さをなじませて配置
+                if w_mark or w_wind:
+                    st.markdown(f"""
+                    <div class="cal-bg-layer">
+                        <div class="cal-bg-weather">{w_mark}</div>
+                        <div class="cal-bg-wind">{w_wind}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # 日付ボタン
                 if st.button(day_label, key=f"day_btn_{date_str}_{week_idx}"):
                     st.session_state.selected_date = this_date
                     st.rerun()
                 
-                # 💡【修正点②】「📍 予定」そのものを本物のタップ可能なボタンに変更！
+                # 📍 予定ボタン
                 day_events = [e for e in events if e.get("date") == date_str]
                 for idx, e in enumerate(day_events):
                     if st.button(f"📍 {e['title']}", key=f"ev_btn_{date_str}_{idx}_{week_idx}"):
                         st.session_state.selected_date = this_date
                         st.rerun()
                         
-                # 💡【修正点③】「🚫 NG日」そのものを本物のタップ可能なボタンに変更！
+                # 🚫 NG日ボタン
                 day_ngs = [n for n in ng_dates if n.get("date") == date_str]
                 for idx, n in enumerate(day_ngs):
                     if st.button(f"🚫 {n.get('userName', '不明')}", key=f"ng_btn_{date_str}_{idx}_{week_idx}"):
