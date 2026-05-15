@@ -530,7 +530,6 @@ with tab3:
                     get_finances_ref().document(f['id']).update({"date": str(ed), "amount": ea, "memo": em}); st.rerun()
                 if col_d.button("削除", key=f"dbf_{f['id']}", use_container_width=True):
                     get_finances_ref().document(f['id']).delete(); st.rerun()
-
 # --- タブ4: NG日 ---
 with tab4:
     nd, nt = st.date_input("日付", value=today_jst, key="ng_in"), time_selector_ui("ng_time_in")
