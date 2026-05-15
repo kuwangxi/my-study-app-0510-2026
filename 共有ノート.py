@@ -128,16 +128,20 @@ weather_data = get_shinjuku_weather()
 st.markdown(f"""
 <style>
     html, body, [class*="st-"] {{ font-size: {st.session_state.font_size}px !important; }}
+    
     /* スマホでも強制的に横7列に均等配分する設定 */
-    .cal-grid { 
+    .cal-grid {{ 
         display: grid; 
         grid-template-columns: repeat(7, minmax(0, 1fr)); 
         gap: 3px; 
         width: 100%; 
         margin-top: 10px; 
-    }
+    }}
+    
+    .cal-header-item {{ text-align: center; font-weight: bold; font-size: 0.8em; padding: 5px 0; background-color: var(--secondary-background-color); color: var(--text-color); border-radius: 4px; }}
+    
     /* スマホの画面に収まるよう、最小の高さを少し低く調整 */
-    .cal-box { 
+    .cal-box {{ 
         border: 1px solid rgba(128, 128, 128, 0.3); 
         border-radius: 4px; 
         padding: 2px; 
@@ -145,8 +149,8 @@ st.markdown(f"""
         background-color: var(--background-color); 
         position: relative; 
         overflow: hidden; 
-    }
-    .cal-header-item {{ text-align: center; font-weight: bold; font-size: 0.8em; padding: 5px 0; background-color: var(--secondary-background-color); color: var(--text-color); border-radius: 4px; }}
+    }}
+    
     .cal-date {{ font-size: 0.8em; font-weight: bold; margin-bottom: 2px; color: var(--text-color); }}
     .cal-today {{ border: 2px solid {st.session_state.user_color} !important; background-color: var(--secondary-background-color) !important; }}
     .cal-dot {{ font-size: 0.7em; margin-bottom: 1px; border-radius: 2px; padding: 1px 2px; line-height: 1.1; }}
