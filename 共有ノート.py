@@ -206,11 +206,29 @@ def render_thread_info(item):
 tab1, tab2, tab3, tab4 = st.tabs(["📍 行きたい", "📅 予定一覧", "🗓️ カレンダー", "🚫 NG日"])
 
 # --- タブ1: 行きたい ---
+# --- タブ1: 行きたい ---
 with tab1:
     def add_wishlist_item():
-        def add_comment(doc_id):
-        # セッションステートから入力されたテキストを取得
+        t_val = st.session_state.get("input_title_wish")
+        u_val = st.session_state.get("input_url_wish")
+        m_val = st.session_state.get("input_memo_wish")
+        if t_val:
+            get_events_ref().add({
+                "roomKey": room_key, "title": t_val, "url": u_val, "memo": m_val, 
+                "status": "wishlist", "comments": [], 
+                "time": st.session_state.get("wish_add_time", ""), 
+                "createdAt": get_jst_now().isoformat()
+            })
+            st.session_state["input_title_wish"] = ""
+            st.session_state["input_url_wish"] = ""
+            st.session_state["input_memo_wish"] = ""
+
+    def add_comment(doc_id):
         new_text = st.session_state.get(f"nc_{doc_id}")
+        if new_text:
+            c_obj = {"userName": user_name, "text": new_text, "createdAt": get_jst_now().isoformat()}
+            get_events_ref().document(doc_id).update({"comments": firestore.ArrayUnion([c_obj])})
+            st.session_state[f"nc_{doc_id}"] = ""
         if new_text:
             # データベースに保存
             c_obj = {"userName": user_name, "text": new_text, "createdAt": get_jst_now().isoformat()}
