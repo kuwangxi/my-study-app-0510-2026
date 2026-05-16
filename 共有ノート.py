@@ -96,7 +96,6 @@ def time_selector_ui(key_prefix, default_val="カスタム"):
 @st.cache_data(ttl=3600)
 def get_shinjuku_weather():
     try:
-        # 新宿の正確な位置：緯度35.6895, 経度139.7005
         url = "https://api.open-meteo.com/v1/forecast?latitude=35.6895&longitude=139.7005&daily=weathercode,windspeed_10m_max&timezone=Asia%2FTokyo&past_days=7&forecast_days=14"
         res = requests.get(url).json()
         w_map = {}
@@ -104,7 +103,6 @@ def get_shinjuku_weather():
             code = res['daily']['weathercode'][i]
             wind = res['daily']['windspeed_10m_max'][i]
             
-            # 天気アイコン
             if code in [0, 1]: mark = "☀️"
             elif code in [2, 3]: mark = "☁️"
             elif code in [45, 48]: mark = "🌫️"
@@ -113,7 +111,6 @@ def get_shinjuku_weather():
             elif code in [95,96,99]: mark = "⚡"
             else: mark = ""
 
-            # 風の表示
             wind_info = ""
             if wind >= 20.0: wind_info = f"🚩強風({int(wind)})"
             elif wind >= 10.0: wind_info = f"🍃風({int(wind)})"
@@ -123,50 +120,6 @@ def get_shinjuku_weather():
     except: return {}
 
 weather_data = get_shinjuku_weather()
-
-# CSS
-st.markdown(f"""
-<style>
-    html, body, [class*="st-"] {{ font-size: {st.session_state.font_size}px !important; }}
-    
-    /* スマホでも強制的に横7列に均等配分する設定 */
-    .cal-grid {{ 
-        display: grid; 
-        grid-template-columns: repeat(7, minmax(0, 1fr)); 
-        gap: 3px; 
-        width: 100%; 
-        margin-top: 10px; 
-    }}
-    
-    .cal-header-item {{ text-align: center; font-weight: bold; font-size: 0.8em; padding: 5px 0; background-color: var(--secondary-background-color); color: var(--text-color); border-radius: 4px; }}
-    
-    /* スマホの画面に収まるよう、最小の高さを少し低く調整 */
-    .cal-box {{ 
-        border: 1px solid rgba(128, 128, 128, 0.3); 
-        border-radius: 4px; 
-        padding: 2px; 
-        min-height: 65px; 
-        background-color: var(--background-color); 
-        position: relative; 
-        overflow: hidden; 
-    }}
-    
-    .cal-date {{ font-size: 0.8em; font-weight: bold; margin-bottom: 2px; color: var(--text-color); }}
-    .cal-today {{ border: 2px solid {st.session_state.user_color} !important; background-color: var(--secondary-background-color) !important; }}
-    .cal-dot {{ font-size: 0.7em; margin-bottom: 1px; border-radius: 2px; padding: 1px 2px; line-height: 1.1; }}
-    .event-dot {{ background-color: rgba(59, 130, 246, 0.2) !important; color: #60a5fa !important; }}
-    .period-dot {{ background-color: transparent !important; color: #f43f5e; border: none !important; font-weight: bold; font-size: 1.1em; }}
-    .ovulation-dot {{ background-color: transparent !important; color: #a855f7; border: none !important; font-weight: bold; font-size: 1.1em; }}
-    .pms-dot {{ background-color: transparent !important; color: #eab308; border: none !important; font-weight: bold; font-size: 1.1em; }}
-    .fertility-dot {{ background-color: transparent !important; color: #22c55e; border: none !important; font-weight: bold; font-size: 1.1em; }}
-    .ng-dot {{ background: repeating-linear-gradient(45deg, rgba(128, 128, 128, 0.1), rgba(128, 128, 128, 0.1) 5px, rgba(150, 150, 150, 0.2) 5px, rgba(150, 150, 150, 0.2) 10px); color: var(--text-color); border: 1px solid rgba(128, 128, 128, 0.3); }}
-    .last-comment {{ font-size: 0.85em; border-left: 4px solid; padding-left: 10px; margin-top: 10px; margin-bottom: 10px; line-height: 1.4; }}
-    .time-badge {{ background-color: rgba(128, 128, 128, 0.2); padding: 2px 6px; border-radius: 4px; font-size: 0.8em; }}
-    .weather-bg {{ position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 3em; opacity: 0.15; pointer-events: none; z-index: 0; }}
-    .expense-dot {{ background-color: transparent !important; color: #ef4444; border: none !important; font-weight: bold; font-size: 0.75em; text-align: right; }}
-    .memo-text {{ font-size: 0.85em; color: gray; margin-bottom: 5px; background: rgba(128, 128, 128, 0.05); padding: 5px; border-radius: 4px; }}
-</style>
-""", unsafe_allow_html=True)
 
 # ==========================================
 # 2. ログイン処理
@@ -248,60 +201,44 @@ def render_thread_info(item):
     comments = item.get("comments", [])
     if comments:
         last = sorted(comments, key=lambda x: x.get('createdAt', ''))[-1]; color = st.session_state.room_user_colors.get(last['userName'], "#999999")
-        st.markdown(f'<div class="last-comment" style="border-color: {color};"><span style="color: {color}; font-weight: bold;">{last["userName"]}</span>: {last["text"]}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="last-comment" style="border-left: 4px solid {color}; padding-left: 10px; margin-top: 10px;"><span style="color: {color}; font-weight: bold;">{last["userName"]}</span>: {last["text"]}</div>', unsafe_allow_html=True)
 
 tab1, tab2, tab3, tab4 = st.tabs(["📍 行きたい", "📅 予定一覧", "🗓️ カレンダー", "🚫 NG日"])
 
 # --- タブ1: 行きたい ---
 with tab1:
-    # 1. 保存とリセットを同時に行う「専用の命令」を定義します
     def add_wishlist_item():
-        # session_stateから現在の入力内容を取得
         t_val = st.session_state.get("input_title_wish")
         u_val = st.session_state.get("input_url_wish")
         m_val = st.session_state.get("input_memo_wish")
-        # 時間選択の結果もsession_stateから取得（time_selector_uiの内部仕様に合わせる）
-        # ※もし時間指定がうまく取れない場合は、ここを調整します
-        
         if t_val:
-            # Firebaseにデータを追加
             get_events_ref().add({
-                "roomKey": room_key, 
-                "title": t_val, 
-                "url": u_val, 
-                "memo": m_val, 
-                "status": "wishlist", 
-                "comments": [], 
-                "time": st.session_state.get("wish_add_time", ""), # time_selector_uiが保存するキー名
+                "roomKey": room_key, "title": t_val, "url": u_val, "memo": m_val, 
+                "status": "wishlist", "comments": [], 
+                "time": st.session_state.get("wish_add_time", ""), 
                 "createdAt": get_jst_now().isoformat()
             })
-            # 入力欄を空っぽに掃除する
             st.session_state["input_title_wish"] = ""
             st.session_state["input_url_wish"] = ""
             st.session_state["input_memo_wish"] = ""
 
-    # 追加用エキスパンダー
     with st.expander("＋ 新しい場所を追加"):
         st.text_input("場所/内容", key="input_title_wish")
         st.text_input("URL (任意)", key="input_url_wish")
         st.text_area("メモ (任意)", key="input_memo_wish")
         wt = time_selector_ui("wish_add")
-        
-        # 【修正ポイント】on_clickを使って、描画が始まる前に保存とリセットを終わらせます
         st.button("リストに追加", type="primary", on_click=add_wishlist_item)
 
-    # --- ここから下の「表示・編集・削除」機能は一切削らずそのまま維持します ---
     wish_items = [e for e in events if e.get("status") == "wishlist"]
     for item in sorted(wish_items, key=get_latest_activity_time, reverse=True):
         with st.container(border=True):
             st.markdown(f"### {item['title']}")
-            if item.get("memo"): st.markdown(f'<div class="memo-text">📝 {item["memo"]}</div>', unsafe_allow_html=True)
+            if item.get("memo"): st.markdown(f'<div style="font-size: 0.85em; color: gray; margin-bottom: 5px; background: rgba(128, 128, 128, 0.05); padding: 5px; border-radius: 4px;">📝 {item["memo"]}</div>', unsafe_allow_html=True)
             if item.get("url"): st.markdown(f"🔗 **参考リンク:** [{item['url']}]({item['url']})")
-            if item.get("time"): st.markdown(f"<span class='time-badge'>⏰ {item['time']}</span>", unsafe_allow_html=True)
+            if item.get("time"): st.markdown(f"<span style='background-color: rgba(128, 128, 128, 0.2); padding: 2px 6px; border-radius: 4px; font-size: 0.8em;'>⏰ {item['time']}</span>", unsafe_allow_html=True)
             render_thread_info(item)
             
             c_msg, c_edit = st.columns(2) 
-            
             with c_msg: 
                 with st.expander("💬 コメント・確定"):
                     for c in sorted(item.get("comments", []), key=lambda x: x.get('createdAt', '')):
@@ -334,14 +271,11 @@ with tab1:
 with tab2:
     sched_items = sorted([e for e in events if e.get("status") == "scheduled"], key=lambda x: x["date"])
     today_str = str(today_jst)
-    
-    # 予定を「未来」と「過去」に分類
     future_items = [e for e in sched_items if e["date"] >= today_str]
     past_items = [e for e in sched_items if e["date"] < today_str]
     
     st.subheader("🚀 これからの予定")
-    if not future_items:
-        st.info("これからの予定はありません")
+    if not future_items: st.info("これからの予定はありません")
         
     for item in future_items:
         with st.container(border=True):
@@ -351,19 +285,14 @@ with tab2:
                 new_title = st.text_input("内容", value=item['title'], key=f"edit_t_{item['id']}")
                 new_date = st.date_input("日付", value=datetime.strptime(item['date'], "%Y-%m-%d").date(), key=f"edit_d_{item['id']}")
                 new_time = time_selector_ui(f"edit_tm_{item['id']}", default_val=item.get('time', 'カスタム'))
-                
                 c_u, c_d = st.columns(2)
                 if c_u.button("更新", key=f"save_{item['id']}", use_container_width=True):
                     get_events_ref().document(item['id']).update({"title": new_title, "date": str(new_date), "time": new_time}); st.rerun()
                 if c_d.button("🗑️ 削除", key=f"del_{item['id']}", use_container_width=True):
                     get_events_ref().document(item['id']).delete(); st.rerun()
-                
-                # --- 【追加】行きたいに戻すボタン ---
                 if st.button("💡 行きたいリストに戻す", key=f"revert_{item['id']}", use_container_width=True):
-                    # statusをwishlistに変更し、日付情報を削除します
                     get_events_ref().document(item['id']).update({"status": "wishlist", "date": None}); st.rerun()
 
-    # 過去の予定を折り畳む
     if past_items:
         st.divider()
         with st.expander("✅ 終わった予定・過去のログを表示"):
@@ -375,14 +304,11 @@ with tab2:
                         new_title = st.text_input("内容", value=item['title'], key=f"edit_t_past_{item['id']}")
                         new_date = st.date_input("日付", value=datetime.strptime(item['date'], "%Y-%m-%d").date(), key=f"edit_d_past_{item['id']}")
                         new_time = time_selector_ui(f"edit_tm_past_{item['id']}", default_val=item.get('time', 'カスタム'))
-                        
                         c_u, c_d = st.columns(2)
                         if c_u.button("更新", key=f"save_past_{item['id']}", use_container_width=True):
                             get_events_ref().document(item['id']).update({"title": new_title, "date": str(new_date), "time": new_time}); st.rerun()
                         if c_d.button("🗑️ 削除", key=f"del_past_{item['id']}", use_container_width=True):
                             get_events_ref().document(item['id']).delete(); st.rerun()
-
-                        # --- 【追加】過去の予定からも戻せるように設定 ---
                         if st.button("💡 行きたいリストに戻す", key=f"revert_past_{item['id']}", use_container_width=True):
                             get_events_ref().document(item['id']).update({"status": "wishlist", "date": None}); st.rerun()
 
@@ -391,7 +317,6 @@ with tab3:
     sorted_events = sorted(events, key=lambda x: str(x.get("time") or "23:59"))
     finances = [{"id": d.id, **d.to_dict()} for d in get_finances_ref().where("roomKey", "==", room_key).stream()]
     
-    # 1. 月移動ヘッダー
     cm1, cm2, cm3 = st.columns([1, 2, 1])
     if cm1.button("◀ 前月", key="prev_m", use_container_width=True): 
         st.session_state.current_month = (st.session_state.current_month - timedelta(days=1)).replace(day=1); st.rerun()
@@ -399,90 +324,58 @@ with tab3:
     if cm3.button("次月 ▶", key="next_m", use_container_width=True): 
         st.session_state.current_month = (st.session_state.current_month + timedelta(days=32)).replace(day=1); st.rerun()
 
-    # 表示用日付の初期化
     if "selected_date" not in st.session_state:
         st.session_state.selected_date = today_jst
 
-    # 💡【絶対死守】スマホでも7日間横並びを固定し、天気・風を確実に前面透過表示するCSS
+    # 💡 天気ズレ修正 ＆ 長文折り返し（white-space: normal）
     st.markdown("""
     <style>
-        /* 🔥 確定事項: スマホ画面でも7日間（日〜土）の横並びを絶対に維持する */
+        /* 🔥 スマホ画面での7日間横並び絶対維持 */
         div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) {
-            display: flex !important;
-            flex-direction: row !important;
-            flex-wrap: nowrap !important;
-            width: 100% !important;
-            gap: 2px !important;
+            display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important;
+            width: 100% !important; gap: 2px !important;
         }
         div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) > div[data-testid="stColumn"] {
-            flex: 1 1 0% !important;
-            min-width: 0 !important;
-            max-width: 100% !important;
-            position: relative !important;
-            min-height: 105px !important;
-            border: 1px solid rgba(128, 128, 128, 0.18) !important;
-            border-radius: 4px !important;
-            padding: 2px !important;
-            margin: 0 !important;
-            background-color: var(--background-color);
-            overflow: hidden !important;
+            flex: 1 1 0% !important; min-width: 0 !important; max-width: 100% !important;
+            position: relative !important; min-height: 105px !important;
+            border: 1px solid rgba(128, 128, 128, 0.18) !important; border-radius: 4px !important;
+            padding: 2px !important; margin: 0 !important; background-color: var(--background-color);
         }
         
-        /* 🌤 天気マークと風の強さをマスの中心に馴染ませる前面透過レイヤー */
+        /* 🌤 天気と風を「完全な中央」に配置し、見切れを防ぐ */
         .cal-bg-layer {
             position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            display: flex !important;
-            flex-direction: column !important;
-            justify-content: center !important;
-            align-items: center !important;
-            pointer-events: none !important; /* タップを後ろのボタンに完全に通す */
-            z-index: 10 !important; /* ボタンの前に浮かび上がらせて確実に表示 */
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            display: flex !important; flex-direction: column !important;
+            justify-content: center !important; align-items: center !important;
+            pointer-events: none !important; z-index: 10 !important;
         }
-        .cal-bg-weather {
-            font-size: 1.8em !important;
-            opacity: 0.15 !important;
-            line-height: 1 !important;
-        }
-        .cal-bg-wind {
-            font-size: 0.58em !important;
-            opacity: 0.45 !important;
-            color: gray !important;
-            margin-top: 2px !important;
-        }
+        .cal-bg-weather { font-size: 1.8em !important; opacity: 0.15 !important; line-height: 1 !important; }
+        .cal-bg-wind { font-size: 0.58em !important; opacity: 0.45 !important; color: gray !important; margin-top: 2px !important; }
 
-        /* カレンダー内の各ボタンのスマホ最適化（極小・透過デザイン） */
+        /* カレンダーボタンのスマホ最適化（🔥文字を折り返して全て表示させる） */
         div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) .stButton > button {
-            padding: 1px 2px !important;
-            font-size: 0.65em !important;
-            line-height: 1.1 !important;
-            border-radius: 3px !important;
-            width: 100% !important;
-            text-align: center !important;
-            margin: 1px 0 !important;
-            white-space: nowrap !important;
-            overflow: hidden !important;
-            text-overflow: ellipsis !important;
+            padding: 2px 3px !important; font-size: 0.65em !important; line-height: 1.2 !important;
+            border-radius: 3px !important; width: 100% !important; text-align: left !important;
+            margin: 1px 0 !important; 
+            white-space: normal !important; /* ←【重要】ここをnormalに変更して折り返し可能に */
+            word-break: break-word !important; /* ←【重要】長い単語も改行する */
             border: 1px solid rgba(128, 128, 128, 0.1) !important;
             background-color: rgba(128, 128, 128, 0.04) !important;
         }
     </style>
     """, unsafe_allow_html=True)
 
-    # 2. カレンダーヘッダー（曜日）
     weekdays = ["日", "月", "火", "水", "木", "金", "土"]
     hdr_cols = st.columns(7)
     for i, w in enumerate(weekdays):
         color = "#ff4b4b" if i == 0 else "#1c83e1" if i == 6 else "inherit"
         hdr_cols[i].markdown(f"<center><b style='font-size:0.75em; color:{color};'>{w}</b></center>", unsafe_allow_html=True)
         
-    # カレンダーの日にちマトリクスを取得
     month_days = calendar.Calendar(6).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
     
-    # 3. カレンダーマスの配置
     for week_idx, week in enumerate(month_days):
         cols = st.columns(7)
         for i, day in enumerate(week):
@@ -493,7 +386,6 @@ with tab3:
             this_date = st.session_state.current_month.replace(day=day)
             date_str = str(this_date)
             
-            # 各種データの事前取得（天気、生理、支出）
             w_info = weather_data.get(date_str, {"mark": "", "wind": ""})
             w_mark = w_info["mark"]
             w_wind = w_info["wind"]
@@ -505,13 +397,10 @@ with tab3:
             day_expenses = [f['amount'] for f in finances if f.get('date') == date_str]
             if day_expenses: p_info += "💸"
 
-            # 日付のボタン文字（今日の場合はマーク付与）
             day_label = f"{day} {p_info}".strip()
-            if this_date == today_jst:
-                day_label = f"⭐{day}"
+            if this_date == today_jst: day_label = f"⭐{day}"
 
             with cols[i]:
-                # 💡【重要】天気と風を「前面透過レイヤー」として確実に描画（z-index:10 で絶対に消えません）
                 if w_mark or w_wind:
                     st.markdown(f"""
                     <div class="cal-bg-layer">
@@ -520,26 +409,21 @@ with tab3:
                     </div>
                     """, unsafe_allow_html=True)
 
-                # 日付ボタン（ここをタップしても詳細に飛びます）
                 if st.button(day_label, key=f"day_btn_{date_str}_{week_idx}"):
-                    st.session_state.selected_date = this_date
-                    st.rerun()
+                    st.session_state.selected_date = this_date; st.rerun()
                 
-                # 📍 予定ボタン
                 day_events = [e for e in events if e.get("date") == date_str]
                 for idx, e in enumerate(day_events):
                     if st.button(f"📍{e['title']}", key=f"ev_btn_{date_str}_{idx}_{week_idx}"):
-                        st.session_state.selected_date = this_date
-                        st.rerun()
+                        st.session_state.selected_date = this_date; st.rerun()
                         
-                # 🚫 NG日ボタン
+                # 💡【修正】NG日を「メモ内容」にし、赤い強調ボタン（type="primary"）に変更
                 day_ngs = [n for n in ng_dates if n.get("date") == date_str]
                 for idx, n in enumerate(day_ngs):
-                    if st.button(f"🚫{n.get('userName', '不明')}", key=f"ng_btn_{date_str}_{idx}_{week_idx}"):
-                        st.session_state.selected_date = this_date
-                        st.rerun()
+                    ng_text = n.get('memo') if n.get('memo') else "NG" # メモがあればメモ、無ければ「NG」
+                    if st.button(f"🚫{ng_text}", key=f"ng_btn_{date_str}_{idx}_{week_idx}", type="primary"):
+                        st.session_state.selected_date = this_date; st.rerun()
 
-    # 4. タップされた日の詳細表示エリア
     st.divider()
     sel_str = str(st.session_state.selected_date)
     sel_weather = weather_data.get(sel_str, {"mark": "", "wind": ""})
@@ -548,28 +432,23 @@ with tab3:
     with st.container(border=True):
         st.markdown(f"### 📅 {sel_str} の詳細{weather_header}")
         
-        # --- 1. 予定（📍）の表示 ---
         day_events = [e for e in sorted_events if e.get("date") == sel_str]
         for e in day_events:
             st.info(f"📍 【{e.get('time') or '終日'}】 {e['title']}")
         
-        # --- 2. NG日（🚫）の表示 ---
         day_ngs = [n for n in ng_dates if n.get("date") == sel_str]
         for n in day_ngs:
             memo_part = f" ： {n['memo']}" if n.get("memo") else ""
             st.error(f"🚫 【{n.get('time') or '終日'}】 {n.get('userName', '不明')} のNG{memo_part}")
 
-        # --- 3. 生理予定（🌙）の表示 ---
         if sel_str in period_dates:
             for p_type, p_mark in period_dates[sel_str]:
                 label = "生理予定日" if p_type == "period" else "排卵予定日"
                 st.warning(f"{p_mark} {label}")
         
-        # 何も予定がない場合
         if not day_events and not day_ngs and sel_str not in period_dates:
             st.write("この日の予定やNG登録はありません。カレンダー上の他の日をタップすると詳細が切り替わります。")
 
-    # --- 家計簿エリア ---
     st.divider()
     with st.expander("💰 共有貯金", expanded=False):
         room_doc = get_rooms_ref().document(room_key).get()
@@ -617,7 +496,9 @@ with tab3:
                     get_finances_ref().document(f['id']).update({"date": str(ed), "amount": ea, "memo": em}); st.rerun()
                 if col_d.button("削除", key=f"dbf_{f['id']}", use_container_width=True):
                     get_finances_ref().document(f['id']).delete(); st.rerun()
+
 # --- タブ4: NG日 ---
+# 💡【修正】予定一覧（タブ2）と同じように「これからのNG日」と「過去のNG日ログ」に分類しました
 with tab4:
     nd, nt = st.date_input("日付", value=today_jst, key="ng_in"), time_selector_ui("ng_time_in")
     n_memo = st.text_input("メモ (任意)", key="ng_memo_in")
@@ -625,19 +506,29 @@ with tab4:
         get_ng_ref().add({"roomKey": room_key, "userName": user_name, "date": str(nd), "time": nt, "memo": n_memo, "createdAt": get_jst_now().isoformat()}); st.rerun()
     
     st.divider()
-    st.write("▼ 登録済みのNG日（編集・削除）")
-    for n in sorted(ng_dates, key=lambda x: x["date"]):
-        memo_disp = f" - {n['memo']}" if n.get("memo") else ""
-        with st.expander(f"🚫 {n['date']} ({n.get('time', '終日')}) - {n.get('userName', '不明')}{memo_disp}"):
-            end = st.date_input("日付変更", value=datetime.strptime(n['date'], "%Y-%m-%d").date(), key=f"end_{n['id']}")
-            ent = time_selector_ui(f"ent_{n['id']}", default_val=n.get('time', '終日'))
-            enm = st.text_input("メモ変更", value=n.get('memo', ''), key=f"enm_{n['id']}")
-            c_u, c_d = st.columns(2)
-            if c_u.button("更新", key=f"upd_ng_{n['id']}", use_container_width=True):
-                get_ng_ref().document(n['id']).update({"date": str(end), "time": ent, "memo": enm}); st.rerun()
-            if c_d.button("🗑️ 削除", key=f"del_ng_{n['id']}", use_container_width=True):
-                get_ng_ref().document(n['id']).delete(); st.rerun()
-if past_ngs:
+    today_str = str(today_jst)
+    future_ngs = [n for n in ng_dates if n["date"] >= today_str]
+    past_ngs = [n for n in ng_dates if n["date"] < today_str]
+
+    st.subheader("🚫 これからのNG日")
+    if not future_ngs: st.info("登録されているNG日はありません")
+
+    for n in sorted(future_ngs, key=lambda x: x["date"]):
+        with st.container(border=True):
+            st.write(f"📅 {n['date']} {n.get('time', '終日')}")
+            memo_disp = n.get('memo') if n.get('memo') else "理由なし"
+            st.markdown(f"**{n.get('userName', '不明')}のNG: {memo_disp}**")
+            with st.expander("📝 編集・削除"):
+                end = st.date_input("日付変更", value=datetime.strptime(n['date'], "%Y-%m-%d").date(), key=f"end_{n['id']}")
+                ent = time_selector_ui(f"ent_{n['id']}", default_val=n.get('time', '終日'))
+                enm = st.text_input("メモ変更", value=n.get('memo', ''), key=f"enm_{n['id']}")
+                c_u, c_d = st.columns(2)
+                if c_u.button("更新", key=f"upd_ng_{n['id']}", use_container_width=True):
+                    get_ng_ref().document(n['id']).update({"date": str(end), "time": ent, "memo": enm}); st.rerun()
+                if c_d.button("🗑️ 削除", key=f"del_ng_{n['id']}", use_container_width=True):
+                    get_ng_ref().document(n['id']).delete(); st.rerun()
+
+    if past_ngs:
         st.divider()
         with st.expander("✅ 過去のNG日ログ"):
             for n in sorted(past_ngs, key=lambda x: x["date"], reverse=True):
