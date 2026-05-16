@@ -517,7 +517,7 @@ with tab4:
         with st.container(border=True):
             st.write(f"📅 {n['date']} {n.get('time', '終日')}")
             memo_disp = n.get('memo') if n.get('memo') else "理由なし"
-            st.markdown(f"**{n.get('userName', '不明')}のNG: {memo_disp}**")
+            st.markdown(f"**{n.get('userName', '不明')}: {memo_disp}**")
             with st.expander("📝 編集・削除"):
                 end = st.date_input("日付変更", value=datetime.strptime(n['date'], "%Y-%m-%d").date(), key=f"end_{n['id']}")
                 ent = time_selector_ui(f"ent_{n['id']}", default_val=n.get('time', '終日'))
@@ -535,7 +535,7 @@ with tab4:
                 with st.container(border=True):
                     st.write(f"📅 {n['date']} {n.get('time', '終日')}")
                     memo_disp = n.get('memo') if n.get('memo') else "理由なし"
-                    st.markdown(f"**{n.get('userName', '不明')}のNG: {memo_disp}**")
+                    st.markdown(f"**{n.get('userName', '不明')}: {memo_disp}**")
                     with st.expander("📝 編集・削除"):
                         end = st.date_input("日付変更", value=datetime.strptime(n['date'], "%Y-%m-%d").date(), key=f"end_past_{n['id']}")
                         ent = time_selector_ui(f"ent_past_{n['id']}", default_val=n.get('time', '終日'))
