@@ -510,7 +510,7 @@ with tab4:
     future_ngs = [n for n in ng_dates if n["date"] >= today_str]
     past_ngs = [n for n in ng_dates if n["date"] < today_str]
 
-    st.subheader("🚫 これからのNG日")
+    st.subheader("🚫 NG日")
     if not future_ngs: st.info("登録されているNG日はありません")
 
     for n in sorted(future_ngs, key=lambda x: x["date"]):
