@@ -206,7 +206,6 @@ def render_thread_info(item):
 tab1, tab2, tab3, tab4 = st.tabs(["📍 行きたい", "📅 予定一覧", "🗓️ カレンダー", "🚫 NG日"])
 
 # --- タブ1: 行きたい ---
-# --- タブ1: 行きたい ---
 with tab1:
     def add_wishlist_item():
         t_val = st.session_state.get("input_title_wish")
@@ -229,25 +228,6 @@ with tab1:
             c_obj = {"userName": user_name, "text": new_text, "createdAt": get_jst_now().isoformat()}
             get_events_ref().document(doc_id).update({"comments": firestore.ArrayUnion([c_obj])})
             st.session_state[f"nc_{doc_id}"] = ""
-        if new_text:
-            # データベースに保存
-            c_obj = {"userName": user_name, "text": new_text, "createdAt": get_jst_now().isoformat()}
-            get_events_ref().document(doc_id).update({"comments": firestore.ArrayUnion([c_obj])})
-            # コールバック関数の「中」であれば、エラーを出さずにリセットできます
-            st.session_state[f"nc_{doc_id}"] = ""
-        t_val = st.session_state.get("input_title_wish")
-        u_val = st.session_state.get("input_url_wish")
-        m_val = st.session_state.get("input_memo_wish")
-        if t_val:
-            get_events_ref().add({
-                "roomKey": room_key, "title": t_val, "url": u_val, "memo": m_val, 
-                "status": "wishlist", "comments": [], 
-                "time": st.session_state.get("wish_add_time", ""), 
-                "createdAt": get_jst_now().isoformat()
-            })
-            st.session_state["input_title_wish"] = ""
-            st.session_state["input_url_wish"] = ""
-            st.session_state["input_memo_wish"] = ""
 
     with st.expander("＋ 新しい場所を追加"):
         st.text_input("場所/内容", key="input_title_wish")
@@ -271,10 +251,8 @@ with tab1:
                     for c in sorted(item.get("comments", []), key=lambda x: x.get('createdAt', '')):
                         c_user = c.get('userName', '不明'); c_color = st.session_state.room_user_colors.get(c_user, "#999999")
                         st.markdown(f'<div style="font-size: 0.9em; margin-bottom: 5px;"><span style="color: {c_color}; font-weight: bold;">{c_user}</span>: {c.get("text", "")}</div>', unsafe_allow_html=True)
-                   c_col1, c_col2 = st.columns([3, 1])
-                    # on_clickを使うため、new_c = ... で受け取る必要がなくなります
+                    c_col1, c_col2 = st.columns([3, 1])
                     c_col1.text_input("コメント", key=f"nc_{item['id']}", label_visibility="collapsed")
-                    # on_clickで先ほどの関数を呼び出し、argsで対象のIDを渡します（自動で再読み込みされます）
                     c_col2.button("送信", key=f"ncb_{item['id']}", use_container_width=True, on_click=add_comment, args=(item['id'],))
                     st.divider()
                     st.write("📅 予定を確定する")
@@ -353,10 +331,8 @@ with tab3:
     if "selected_date" not in st.session_state:
         st.session_state.selected_date = today_jst
 
-    # 💡 天気ズレ修正 ＆ 長文折り返し（white-space: normal）
     st.markdown("""
     <style>
-        /* 🔥 スマホ画面での7日間横並び絶対維持 */
         div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) {
             display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important;
             width: 100% !important; gap: 2px !important;
@@ -368,7 +344,6 @@ with tab3:
             padding: 2px !important; margin: 0 !important; background-color: var(--background-color);
         }
         
-        /* 🌤 天気と風を「完全な中央」に配置し、見切れを防ぐ */
         .cal-bg-layer {
             position: absolute !important;
             top: 50% !important;
@@ -381,13 +356,12 @@ with tab3:
         .cal-bg-weather { font-size: 1.8em !important; opacity: 0.15 !important; line-height: 1 !important; }
         .cal-bg-wind { font-size: 0.58em !important; opacity: 0.45 !important; color: gray !important; margin-top: 2px !important; }
 
-        /* カレンダーボタンのスマホ最適化（🔥文字を折り返して全て表示させる） */
         div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) .stButton > button {
             padding: 2px 3px !important; font-size: 0.65em !important; line-height: 1.2 !important;
             border-radius: 3px !important; width: 100% !important; text-align: left !important;
             margin: 1px 0 !important; 
-            white-space: normal !important; /* ←【重要】ここをnormalに変更して折り返し可能に */
-            word-break: break-word !important; /* ←【重要】長い単語も改行する */
+            white-space: normal !important; 
+            word-break: break-word !important; 
             border: 1px solid rgba(128, 128, 128, 0.1) !important;
             background-color: rgba(128, 128, 128, 0.04) !important;
         }
@@ -443,10 +417,9 @@ with tab3:
                     if st.button(f"📍{e['title']}", key=f"ev_btn_{date_str}_{idx}_{week_idx}"):
                         st.session_state.selected_date = this_date; st.rerun()
                         
-                # 💡【修正】NG日を「メモ内容」にし、赤い強調ボタン（type="primary"）に変更
                 day_ngs = [n for n in ng_dates if n.get("date") == date_str]
                 for idx, n in enumerate(day_ngs):
-                    ng_text = n.get('memo') if n.get('memo') else "NG" # メモがあればメモ、無ければ「NG」
+                    ng_text = n.get('memo') if n.get('memo') else "NG"
                     if st.button(f"🚫{ng_text}", key=f"ng_btn_{date_str}_{idx}_{week_idx}", type="primary"):
                         st.session_state.selected_date = this_date; st.rerun()
 
@@ -524,12 +497,9 @@ with tab3:
                     get_finances_ref().document(f['id']).delete(); st.rerun()
 
 # --- タブ4: NG日 ---
-# 💡【修正】予定一覧（タブ2）と同じように「これからのNG日」と「過去のNG日ログ」に分類しました
 with tab4:
-    # 📝 登録と同時にテキストボックスをリセットするための関数
     def add_ng_item():
         nd_val = st.session_state.get("ng_in")
-        nt_val = st.session_state.get("ng_time_in") # ※ time_selector_uiの内部キーと連動
         nm_val = st.session_state.get("ng_memo_in")
         
         get_ng_ref().add({
@@ -540,13 +510,11 @@ with tab4:
             "memo": nm_val, 
             "createdAt": get_jst_now().isoformat()
         })
-        # ここでテキストボックス（メモ）をリセット！
         st.session_state["ng_memo_in"] = ""
 
     nd, nt = st.date_input("日付", value=today_jst, key="ng_in"), time_selector_ui("ng_time_in")
     n_memo = st.text_input("メモ (任意)", key="ng_memo_in")
     
-    # 💡 行きたいタブと同じように「on_click」で上の関数を呼び出す形に変えます
     st.button("NG登録", type="primary", use_container_width=True, on_click=add_ng_item)
     st.divider()
     today_str = str(today_jst)
