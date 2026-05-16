@@ -439,7 +439,7 @@ with tab3:
         day_ngs = [n for n in ng_dates if n.get("date") == sel_str]
         for n in day_ngs:
             memo_part = f" ： {n['memo']}" if n.get("memo") else ""
-            st.error(f"🚫 【{n.get('time') or '終日'}】 {n.get('userName', '不明')} のNG{memo_part}")
+            st.error(f"🚫 【{n.get('time') or '終日'}】 {n.get('userName', '不明')} {memo_part}")
 
         if sel_str in period_dates:
             for p_type, p_mark in period_dates[sel_str]:
