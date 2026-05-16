@@ -500,11 +500,28 @@ with tab3:
 # --- タブ4: NG日 ---
 # 💡【修正】予定一覧（タブ2）と同じように「これからのNG日」と「過去のNG日ログ」に分類しました
 with tab4:
+    # 📝 登録と同時にテキストボックスをリセットするための関数
+    def add_ng_item():
+        nd_val = st.session_state.get("ng_in")
+        nt_val = st.session_state.get("ng_time_in") # ※ time_selector_uiの内部キーと連動
+        nm_val = st.session_state.get("ng_memo_in")
+        
+        get_ng_ref().add({
+            "roomKey": room_key, 
+            "userName": user_name, 
+            "date": str(nd_val), 
+            "time": st.session_state.get("t_type_ng_time_in", "終日") if st.session_state.get("t_type_ng_time_in") != "カスタム" else f"{st.session_state.get('t_start_ng_time_in').strftime('%H:%M')}～{st.session_state.get('t_end_ng_time_in').strftime('%H:%M')}", 
+            "memo": nm_val, 
+            "createdAt": get_jst_now().isoformat()
+        })
+        # ここでテキストボックス（メモ）をリセット！
+        st.session_state["ng_memo_in"] = ""
+
     nd, nt = st.date_input("日付", value=today_jst, key="ng_in"), time_selector_ui("ng_time_in")
     n_memo = st.text_input("メモ (任意)", key="ng_memo_in")
-    if st.button("NG登録", type="primary", use_container_width=True):
-        get_ng_ref().add({"roomKey": room_key, "userName": user_name, "date": str(nd), "time": nt, "memo": n_memo, "createdAt": get_jst_now().isoformat()}); st.rerun()
     
+    # 💡 行きたいタブと同じように「on_click」で上の関数を呼び出す形に変えます
+    st.button("NG登録", type="primary", use_container_width=True, on_click=add_ng_item)
     st.divider()
     today_str = str(today_jst)
     future_ngs = [n for n in ng_dates if n["date"] >= today_str]
