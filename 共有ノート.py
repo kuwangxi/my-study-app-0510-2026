@@ -249,7 +249,9 @@ with tab1:
                     if c_col2.button("送信", key=f"ncb_{item['id']}", use_container_width=True):
                         if new_c:
                             c_obj = {"userName": user_name, "text": new_c, "createdAt": get_jst_now().isoformat()}
-                            get_events_ref().document(item['id']).update({"comments": firestore.ArrayUnion([c_obj])}); st.rerun()
+                            get_events_ref().document(item['id']).update({"comments": firestore.ArrayUnion([c_obj])})
+                            st.session_state[f"nc_{item['id']}"] = ""  # ←追加：このテキストボックスのセッション状態を空にする
+                            st.rerun()
                     st.divider()
                     st.write("📅 予定を確定する")
                     sd, st_time = st.date_input("確定日", value=today_jst, key=f"sd_{item['id']}"), time_selector_ui(f"fix_{item['id']}")
