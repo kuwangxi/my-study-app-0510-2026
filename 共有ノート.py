@@ -637,3 +637,20 @@ with tab4:
                 get_ng_ref().document(n['id']).update({"date": str(end), "time": ent, "memo": enm}); st.rerun()
             if c_d.button("🗑️ 削除", key=f"del_ng_{n['id']}", use_container_width=True):
                 get_ng_ref().document(n['id']).delete(); st.rerun()
+if past_ngs:
+        st.divider()
+        with st.expander("✅ 過去のNG日ログ"):
+            for n in sorted(past_ngs, key=lambda x: x["date"], reverse=True):
+                with st.container(border=True):
+                    st.write(f"📅 {n['date']} {n.get('time', '終日')}")
+                    memo_disp = n.get('memo') if n.get('memo') else "理由なし"
+                    st.markdown(f"**{n.get('userName', '不明')}のNG: {memo_disp}**")
+                    with st.expander("📝 編集・削除"):
+                        end = st.date_input("日付変更", value=datetime.strptime(n['date'], "%Y-%m-%d").date(), key=f"end_past_{n['id']}")
+                        ent = time_selector_ui(f"ent_past_{n['id']}", default_val=n.get('time', '終日'))
+                        enm = st.text_input("メモ変更", value=n.get('memo', ''), key=f"enm_past_{n['id']}")
+                        c_u, c_d = st.columns(2)
+                        if c_u.button("更新", key=f"upd_ng_past_{n['id']}", use_container_width=True):
+                            get_ng_ref().document(n['id']).update({"date": str(end), "time": ent, "memo": enm}); st.rerun()
+                        if c_d.button("🗑️ 削除", key=f"del_ng_past_{n['id']}", use_container_width=True):
+                            get_ng_ref().document(n['id']).delete(); st.rerun()
