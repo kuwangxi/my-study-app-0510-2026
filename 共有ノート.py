@@ -403,63 +403,72 @@ with tab3:
     if "selected_date" not in st.session_state:
         st.session_state.selected_date = today_jst
 
-    # 💡【重要】背景の天気・風をなじませ、ボタンを透けさせる新型CSS
-    st.markdown(f"""
+    # 💡【絶対死守】スマホでも7日間横並びを固定し、天気・風を確実に前面透過表示するCSS
+    st.markdown("""
     <style>
-        /* カレンダーのマス(カラム)を背景の基準位置にする */
-        div[data-testid="stColumn"] {{
-            position: relative;
-            min-height: 95px; /* 風の強さが入るので高さを少し広げました */
-            border: 1px solid rgba(128, 128, 128, 0.15);
-            border-radius: 4px;
-            padding: 3px !important;
-            background-color: var(--background-color);
-            overflow: hidden;
-        }}
-        
-        /* 🌤 風と天気を中央にふわっと馴染ませるレイヤー */
-        .cal-bg-layer {{
-            position: absolute;
-            top: 52%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-            pointer-events: none; /* タップの邪魔を絶対にしない */
-            z-index: 0;
-            width: 100%;
-        }}
-        .cal-bg-weather {{
-            font-size: 2.3em;
-            opacity: 0.13; /* 主張しすぎない半透明 */
-            line-height: 1;
-        }}
-        .cal-bg-wind {{
-            font-size: 0.62em;
-            opacity: 0.35; /* 文字として読めつつ背景に溶け込む薄さ */
-            color: var(--text-color);
-            margin-top: 1px;
-        }}
-
-        /* ボタンを前面に出し、背景が透けるように半透明化 */
-        .stButton {{
-            position: relative;
-            z-index: 1;
-        }}
-        .stButton > button {{
-            padding: 3px 5px !important;
-            font-size: 0.72em !important;
-            line-height: 1.2 !important;
-            border-radius: 4px !important;
+        /* 🔥 確定事項: スマホ画面でも7日間（日〜土）の横並びを絶対に維持する */
+        div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
             width: 100% !important;
-            text-align: left !important;
-            margin: 2px 0 !important;
+            gap: 2px !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) > div[data-testid="stColumn"] {
+            flex: 1 1 0% !important;
+            min-width: 0 !important;
+            max-width: 100% !important;
+            position: relative !important;
+            min-height: 105px !important;
+            border: 1px solid rgba(128, 128, 128, 0.18) !important;
+            border-radius: 4px !important;
+            padding: 2px !important;
+            margin: 0 !important;
+            background-color: var(--background-color);
+            overflow: hidden !important;
+        }
+        
+        /* 🌤 天気マークと風の強さをマスの中心に馴染ませる前面透過レイヤー */
+        .cal-bg-layer {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+            align-items: center !important;
+            pointer-events: none !important; /* タップを後ろのボタンに完全に通す */
+            z-index: 10 !important; /* ボタンの前に浮かび上がらせて確実に表示 */
+        }
+        .cal-bg-weather {
+            font-size: 1.8em !important;
+            opacity: 0.15 !important;
+            line-height: 1 !important;
+        }
+        .cal-bg-wind {
+            font-size: 0.58em !important;
+            opacity: 0.45 !important;
+            color: gray !important;
+            margin-top: 2px !important;
+        }
+
+        /* カレンダー内の各ボタンのスマホ最適化（極小・透過デザイン） */
+        div[data-testid="stHorizontalBlock"]:has(> div:nth-child(7)) .stButton > button {
+            padding: 1px 2px !important;
+            font-size: 0.65em !important;
+            line-height: 1.1 !important;
+            border-radius: 3px !important;
+            width: 100% !important;
+            text-align: center !important;
+            margin: 1px 0 !important;
             white-space: nowrap !important;
             overflow: hidden !important;
             text-overflow: ellipsis !important;
-            border: 1px solid rgba(128, 128, 128, 0.12) !important;
-            /* 背景が透けて見えるように極薄の塗りに変更 */
-            background-color: rgba(128, 128, 128, 0.08) !important; 
-        }}
+            border: 1px solid rgba(128, 128, 128, 0.1) !important;
+            background-color: rgba(128, 128, 128, 0.04) !important;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -467,7 +476,8 @@ with tab3:
     weekdays = ["日", "月", "火", "水", "木", "金", "土"]
     hdr_cols = st.columns(7)
     for i, w in enumerate(weekdays):
-        hdr_cols[i].markdown(f"<center><b style='font-size:0.85em;'>{w}</b></center>", unsafe_allow_html=True)
+        color = "#ff4b4b" if i == 0 else "#1c83e1" if i == 6 else "inherit"
+        hdr_cols[i].markdown(f"<center><b style='font-size:0.75em; color:{color};'>{w}</b></center>", unsafe_allow_html=True)
         
     # カレンダーの日にちマトリクスを取得
     month_days = calendar.Calendar(6).monthdayscalendar(st.session_state.current_month.year, st.session_state.current_month.month)
@@ -477,7 +487,7 @@ with tab3:
         cols = st.columns(7)
         for i, day in enumerate(week):
             if day == 0:
-                cols[i].markdown("<div style='min-height:95px; border:none; background:transparent;'></div>", unsafe_allow_html=True)
+                cols[i].markdown("<div style='min-height:105px; border:none; background:transparent;'></div>", unsafe_allow_html=True)
                 continue
                 
             this_date = st.session_state.current_month.replace(day=day)
@@ -486,22 +496,22 @@ with tab3:
             # 各種データの事前取得（天気、生理、支出）
             w_info = weather_data.get(date_str, {"mark": "", "wind": ""})
             w_mark = w_info["mark"]
-            w_wind = w_info["wind"] # 風の情報
+            w_wind = w_info["wind"]
             
             p_info = ""
             if date_str in period_dates:
                 for p_type, p_mark in period_dates[date_str]: p_info += p_mark
             
             day_expenses = [f['amount'] for f in finances if f.get('date') == date_str]
-            if day_expenses: p_info += " 💸"
+            if day_expenses: p_info += "💸"
 
-            # 日付のボタン文字（天気マークは背景に行くのでここからは除外）
+            # 日付のボタン文字（今日の場合はマーク付与）
             day_label = f"{day} {p_info}".strip()
             if this_date == today_jst:
-                day_label = f"📱 {day_label} (今日)"
+                day_label = f"⭐{day}"
 
             with cols[i]:
-                # 💡【復活！】マスの最背面に天気と風の強さをなじませて配置
+                # 💡【重要】天気と風を「前面透過レイヤー」として確実に描画（z-index:10 で絶対に消えません）
                 if w_mark or w_wind:
                     st.markdown(f"""
                     <div class="cal-bg-layer">
@@ -509,8 +519,8 @@ with tab3:
                         <div class="cal-bg-wind">{w_wind}</div>
                     </div>
                     """, unsafe_allow_html=True)
-                
-                # 日付ボタン
+
+                # 日付ボタン（ここをタップしても詳細に飛びます）
                 if st.button(day_label, key=f"day_btn_{date_str}_{week_idx}"):
                     st.session_state.selected_date = this_date
                     st.rerun()
@@ -518,14 +528,14 @@ with tab3:
                 # 📍 予定ボタン
                 day_events = [e for e in events if e.get("date") == date_str]
                 for idx, e in enumerate(day_events):
-                    if st.button(f"📍 {e['title']}", key=f"ev_btn_{date_str}_{idx}_{week_idx}"):
+                    if st.button(f"📍{e['title']}", key=f"ev_btn_{date_str}_{idx}_{week_idx}"):
                         st.session_state.selected_date = this_date
                         st.rerun()
                         
                 # 🚫 NG日ボタン
                 day_ngs = [n for n in ng_dates if n.get("date") == date_str]
                 for idx, n in enumerate(day_ngs):
-                    if st.button(f"🚫 {n.get('userName', '不明')}", key=f"ng_btn_{date_str}_{idx}_{week_idx}"):
+                    if st.button(f"🚫{n.get('userName', '不明')}", key=f"ng_btn_{date_str}_{idx}_{week_idx}"):
                         st.session_state.selected_date = this_date
                         st.rerun()
 
